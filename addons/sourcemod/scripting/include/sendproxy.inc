@@ -2,6 +2,7 @@
 #define _SENDPROXYMANAGER_INC_
 
 #define SENDPROXY_LIB "sendproxy13"
+#define SENDPROXY_PER_PLAYER
 
 enum SendPropType {
 	Prop_Int,
@@ -75,6 +76,9 @@ native bool SendProxy_IsPropChangeArrayHookedGameRules(const char[] cPropName, c
 //these functions returns always true and because they are "void", so, we don't care about value they return because it always same
 native void SendProxy_UnhookPropChangeArray(const int iEntity, const char[] cPropName, const int iElement, const PropChangedCallback pCallback);
 native void SendProxy_UnhookPropChangeArrayGameRules(const char[] cPropName, const int iElement, const PropChangedCallback pCallback);
+
+native void SendProxy_UnhookPropChange(const int iEntity, const char[] cPropName, const PropChangedCallback pCallback);
+native void SendProxy_UnhookPropChangeGameRules(const char[] cPropName, const GameRulesPropChangedCallback pCallback);
 
 #if !defined REQUIRE_EXTENSIONS
 public __ext_sendproxymanager_SetNTVOptional()

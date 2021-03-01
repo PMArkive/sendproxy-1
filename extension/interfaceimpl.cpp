@@ -169,7 +169,7 @@ void CallListenersForHookID(int iHookID)
 	for (int i = 0; i < Info.vListeners->Count(); i++)
 	{
 		ListenerCallbackInfo sInfo = (*Info.vListeners)[i];
-		sInfo.m_pCallBack->OnEntityPropHookRemoved(gameents->EdictToBaseEntity(Info.pEnt), Info.pVar, Info.PropType, Info.sCallbackInfo.iCallbackType, Info.sCallbackInfo.pCallback);
+		sInfo.m_pCallBack->OnEntityPropHookRemoved(gameents->EdictToBaseEntity(Info.pEnt), Info.pVar, Info.propType, Info.sCallbackInfo.iCallbackType, Info.sCallbackInfo.pCallback);
 	}
 }
 
@@ -179,7 +179,7 @@ void CallListenersForHookIDGamerules(int iHookID)
 	for (int i = 0; i < Info.vListeners->Count(); i++)
 	{
 		ListenerCallbackInfo sInfo = (*Info.vListeners)[i];
-		sInfo.m_pCallBack->OnGamerulesPropHookRemoved(Info.pVar, Info.PropType, Info.sCallbackInfo.iCallbackType, Info.sCallbackInfo.pCallback);
+		sInfo.m_pCallBack->OnGamerulesPropHookRemoved(Info.pVar, Info.propType, Info.sCallbackInfo.iCallbackType, Info.sCallbackInfo.pCallback);
 	}
 }
 
@@ -205,7 +205,7 @@ bool SendProxyManagerInterfaceImpl::HookProxy(IExtension * pExt, SendProp * pPro
 	hook.sCallbackInfo.pCallback = pCallback;
 	hook.sCallbackInfo.iCallbackType = iCallbackType;
 	hook.sCallbackInfo.pOwner = (void *)pExt;
-	hook.PropType = iType;
+	hook.propType = iType;
 	hook.pEnt = pEdict;
 	hook.pVar = pProp;
 	bool bHookedAlready = false;
@@ -272,7 +272,7 @@ bool SendProxyManagerInterfaceImpl::HookProxyGamerules(IExtension * pExt, SendPr
 	}
 	if (!bHookedAlready)
 		hook.pRealProxy = pProp->GetProxyFn();
-	hook.PropType = iType;
+	hook.propType = iType;
 	hook.pVar = pProp;
 	sm_sendprop_info_t info;
 	gamehelpers->FindSendPropInfo(g_szGameRulesProxy, pProp->GetName(), &info);
@@ -481,7 +481,7 @@ bool SendProxyManagerInterfaceImpl::HookProxyArray(IExtension * pExt, SendProp *
 	hook.sCallbackInfo.pCallback = pCallback;
 	hook.sCallbackInfo.iCallbackType = iCallbackType;
 	hook.sCallbackInfo.pOwner = (void *)pExt;
-	hook.PropType = iType;
+	hook.propType = iType;
 	hook.pEnt = pEdict;
 	hook.pVar = pPropElem;
 	hook.Element = iElement;
@@ -557,7 +557,7 @@ bool SendProxyManagerInterfaceImpl::HookProxyArrayGamerules(IExtension * pExt, S
 	}
 	if (!bHookedAlready)
 		hook.pRealProxy = pProp->GetProxyFn();
-	hook.PropType = iType;
+	hook.propType = iType;
 	hook.pVar = pProp;
 	sm_sendprop_info_t info;
 	gamehelpers->FindSendPropInfo(g_szGameRulesProxy, pProp->GetName(), &info);

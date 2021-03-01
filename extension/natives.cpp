@@ -261,7 +261,7 @@ static cell_t Native_Hook(IPluginContext * pContext, const cell_t * params)
 	}
 	if (!bHookedAlready)
 		hook.pRealProxy = pProp->GetProxyFn();
-	hook.PropType = propType;
+	hook.propType = propType;
 	hook.pVar = pProp;
 	
 	//if this prop has been hooked already, don't set the proxy again
@@ -323,7 +323,7 @@ static cell_t Native_HookGameRules(IPluginContext * pContext, const cell_t * par
 	}
 	if (!bHookedAlready)
 		hook.pRealProxy = pProp->GetProxyFn();
-	hook.PropType = propType;
+	hook.propType = propType;
 	hook.pVar = pProp;
 	
 	//if this prop has been hooked already, don't set the proxy again
@@ -407,7 +407,7 @@ static cell_t Native_HookArrayProp(IPluginContext * pContext, const cell_t * par
 	}
 	if (!bHookedAlready)
 		hook.pRealProxy = pProp->GetProxyFn();
-	hook.PropType = propType;
+	hook.propType = propType;
 	hook.pVar = pProp;
 	
 	if (bHookedAlready)
@@ -438,7 +438,7 @@ static cell_t Native_UnhookArrayProp(IPluginContext * pContext, const cell_t * p
 	for (int i = 0; i < g_Hooks.Count(); i++)
 	{
 		//we check callback here, so, we do not need to check owner
-		if (g_Hooks[i].Element == element && g_Hooks[i].sCallbackInfo.iCallbackType == CallBackType::Callback_PluginFunction && g_Hooks[i].PropType == propType && g_Hooks[i].sCallbackInfo.pCallback == (void *)callback && !strcmp(g_Hooks[i].pVar->GetName(), propName) && g_Hooks[i].objectID == entity)
+		if (g_Hooks[i].Element == element && g_Hooks[i].sCallbackInfo.iCallbackType == CallBackType::Callback_PluginFunction && g_Hooks[i].propType == propType && g_Hooks[i].sCallbackInfo.pCallback == (void *)callback && !strcmp(g_Hooks[i].pVar->GetName(), propName) && g_Hooks[i].objectID == entity)
 		{
 			g_SendProxyManager.UnhookProxy(i);
 			return 1;
@@ -564,7 +564,7 @@ static cell_t Native_HookArrayPropGamerules(IPluginContext * pContext, const cel
 	}
 	if (!bHookedAlready)
 		hook.pRealProxy = pProp->GetProxyFn();
-	hook.PropType = propType;
+	hook.propType = propType;
 	hook.pVar = pProp;
 	
 	if (bHookedAlready)
@@ -590,7 +590,7 @@ static cell_t Native_UnhookArrayPropGamerules(IPluginContext * pContext, const c
 	IPluginFunction * pFunction = pContext->GetFunctionById(params[4]);
 	for (int i = 0; i < g_Hooks.Count(); i++)
 	{
-		if (g_HooksGamerules[i].Element == iElement && g_HooksGamerules[i].sCallbackInfo.iCallbackType == CallBackType::Callback_PluginFunction && g_HooksGamerules[i].PropType == iPropType && g_HooksGamerules[i].sCallbackInfo.pCallback == (void *)pFunction && !strcmp(g_HooksGamerules[i].pVar->GetName(), propName))
+		if (g_HooksGamerules[i].Element == iElement && g_HooksGamerules[i].sCallbackInfo.iCallbackType == CallBackType::Callback_PluginFunction && g_HooksGamerules[i].propType == iPropType && g_HooksGamerules[i].sCallbackInfo.pCallback == (void *)pFunction && !strcmp(g_HooksGamerules[i].pVar->GetName(), propName))
 		{
 			g_SendProxyManager.UnhookProxyGamerules(i);
 			return 1;

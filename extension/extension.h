@@ -98,7 +98,7 @@ struct SendPropHook
 	edict_t *								pEnt;
 	SendVarProxyFn							pRealProxy;
 	int										objectID;
-	PropType								PropType;
+	PropType								propType;
 	int										Offset;
 	int										Element{0};
 	CUtlVector<ListenerCallbackInfo> *		vListeners;
@@ -117,7 +117,7 @@ struct SendPropHookGamerules
 	CallBackInfo							sCallbackInfo;
 	SendProp *								pVar;
 	SendVarProxyFn							pRealProxy;
-	PropType								PropType;
+	PropType								propType;
 	int										Element{0};
 	CUtlVector<ListenerCallbackInfo> *		vListeners;
 };
@@ -140,7 +140,7 @@ struct PropChangeHook
 		char								cLastValue[4096];
 	};
 	SendProp *								pVar;
-	PropType								PropType;
+	PropType								propType;
 	unsigned int							Offset;
 	int										objectID;
 	int										Element{0};
@@ -165,7 +165,7 @@ struct PropChangeHookGamerules
 		char								cLastValue[4096];
 	};
 	SendProp *								pVar;
-	PropType								PropType;
+	PropType								propType;
 	unsigned int							Offset;
 	int										Element{0};
 	CUtlVector<CallBackInfo> *				vCallbacksInfo;

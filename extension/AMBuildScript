@@ -142,8 +142,8 @@ class ExtensionConfig(object):
       cxx.cflags += [
         '-pipe',
         '-fno-strict-aliasing',
-        '-Wall',
-        '-Werror',
+        #'-Wall',
+        #'-Werror',
         '-Wno-unused',
         '-Wno-switch',
         '-Wno-array-bounds',
@@ -151,7 +151,8 @@ class ExtensionConfig(object):
         '-m32',
       ]
       cxx.cxxflags += [
-        '-std=c++11',
+        '-std=c++14',
+        '-fpermissive',
       ]
 
       have_gcc = cxx.vendor == 'gcc'

@@ -390,7 +390,7 @@ void Hook_GameFrame(bool simulating)
 	{
 		for (int i = 0; i < g_ChangeHooks.Count(); i++)
 		{
-			switch(g_ChangeHooks[i].PropType)
+			switch(g_ChangeHooks[i].propType)
 			{
 				case PropType::Prop_Int:
 				{
@@ -456,7 +456,7 @@ void Hook_GameFrame(bool simulating)
 		//Gamerules hooks
 		for (int i = 0; i < g_ChangeHooksGamerules.Count(); i++)
 		{
-			switch(g_ChangeHooksGamerules[i].PropType)
+			switch(g_ChangeHooksGamerules[i].propType)
 			{
 				case PropType::Prop_Int:
 				{
@@ -744,7 +744,7 @@ bool SendProxyManager::AddChangeHookToList(PropChangeHook sHook, CallBackInfo * 
 	if (pHookInfo)
 	{
 		//just validate it
-		switch (sHook.PropType)
+		switch (sHook.propType)
 		{
 		case PropType::Prop_Int:
 		case PropType::Prop_Float:
@@ -761,7 +761,7 @@ bool SendProxyManager::AddChangeHookToList(PropChangeHook sHook, CallBackInfo * 
 		if (!pEnt || pEnt->IsFree()) return false; //should never happen
 		CBaseEntity * pEntity = gameents->EdictToBaseEntity(pEnt);
 		if (!pEntity) return false; //should never happen
-		switch (sHook.PropType)
+		switch (sHook.propType)
 		{
 		case PropType::Prop_Int: sHook.iLastValue = *(int *)((unsigned char *)pEntity + sHook.Offset); break;
 		case PropType::Prop_Float: sHook.flLastValue = *(float *)((unsigned char*)pEntity + sHook.Offset); break;
@@ -791,7 +791,7 @@ bool SendProxyManager::AddChangeHookToListGamerules(PropChangeHookGamerules sHoo
 	if (pHookInfo)
 	{
 		//just validate it
-		switch (sHook.PropType)
+		switch (sHook.propType)
 		{
 		case PropType::Prop_Int:
 		case PropType::Prop_Float:
@@ -804,7 +804,7 @@ bool SendProxyManager::AddChangeHookToListGamerules(PropChangeHookGamerules sHoo
 	}
 	else
 	{
-		switch (sHook.PropType)
+		switch (sHook.propType)
 		{
 		case PropType::Prop_Int: sHook.iLastValue = *(int *)((unsigned char *)g_pGameRules + sHook.Offset); break;
 		case PropType::Prop_Float: sHook.flLastValue = *(float *)((unsigned char*)g_pGameRules + sHook.Offset); break;
@@ -913,13 +913,13 @@ void CallChangeCallbacks(PropChangeHook * pInfo, void * pOldValue, void * pNewVa
 			if (!pEnt)
 				break; //???
 			ISendProxyChangeCallbacks * pCallbacks = (ISendProxyChangeCallbacks *)sCallback.pCallback;
-			pCallbacks->OnEntityPropChange(gameents->EdictToBaseEntity(pEnt), pInfo->pVar, pNewValue, pOldValue, pInfo->PropType, pInfo->Element);
+			pCallbacks->OnEntityPropChange(gameents->EdictToBaseEntity(pEnt), pInfo->pVar, pNewValue, pOldValue, pInfo->propType, pInfo->Element);
 		}
 		break;
 		case CallBackType::Callback_PluginFunction:
 		{
 			IPluginFunction * pCallBack = (IPluginFunction *)sCallback.pCallback;
-			switch (pInfo->PropType)
+			switch (pInfo->propType)
 			{
 			case PropType::Prop_Int:
 			{
@@ -986,13 +986,13 @@ void CallChangeGamerulesCallbacks(PropChangeHookGamerules * pInfo, void * pOldVa
 		case CallBackType::Callback_CPPCallbackInterface:
 		{
 			ISendProxyChangeCallbacks * pCallbacks = (ISendProxyChangeCallbacks *)sCallback.pCallback;
-			pCallbacks->OnGamerulesPropChange(pInfo->pVar, pNewValue, pOldValue, pInfo->PropType, pInfo->Element);
+			pCallbacks->OnGamerulesPropChange(pInfo->pVar, pNewValue, pOldValue, pInfo->propType, pInfo->Element);
 		}
 		break;
 		case CallBackType::Callback_PluginFunction:
 		{
 			IPluginFunction * pCallBack = (IPluginFunction *)sCallback.pCallback;
-			switch (pInfo->PropType)
+			switch (pInfo->propType)
 			{
 			case PropType::Prop_Int:
 			{
@@ -1078,7 +1078,7 @@ bool CallInt(SendPropHook hook, int *ret)
 		{
 			ISendProxyCallbacks * pCallbacks = (ISendProxyCallbacks *)hook.sCallbackInfo.pCallback;
 			int iValue = *ret;
-			bool bChange = pCallbacks->OnEntityPropProxyFunctionCalls(gameents->EdictToBaseEntity(hook.pEnt), hook.pVar, (CBasePlayer *)gamehelpers->ReferenceToEntity(g_iCurrentClientIndexInLoop + 1), (void *)&iValue, hook.PropType, hook.Element);
+			bool bChange = pCallbacks->OnEntityPropProxyFunctionCalls(gameents->EdictToBaseEntity(hook.pEnt), hook.pVar, (CBasePlayer *)gamehelpers->ReferenceToEntity(g_iCurrentClientIndexInLoop + 1), (void *)&iValue, hook.propType, hook.Element);
 			if (bChange)
 			{
 				*ret = iValue;
@@ -1120,7 +1120,7 @@ bool CallIntGamerules(SendPropHookGamerules hook, int *ret)
 		{
 			ISendProxyCallbacks * pCallbacks = (ISendProxyCallbacks *)hook.sCallbackInfo.pCallback;
 			int iValue = *ret;
-			bool bChange = pCallbacks->OnGamerulesPropProxyFunctionCalls(hook.pVar, (CBasePlayer *)gamehelpers->ReferenceToEntity(g_iCurrentClientIndexInLoop + 1), (void *)&iValue, hook.PropType, hook.Element);
+			bool bChange = pCallbacks->OnGamerulesPropProxyFunctionCalls(hook.pVar, (CBasePlayer *)gamehelpers->ReferenceToEntity(g_iCurrentClientIndexInLoop + 1), (void *)&iValue, hook.propType, hook.Element);
 			if (bChange)
 			{
 				*ret = iValue;
@@ -1163,7 +1163,7 @@ bool CallFloat(SendPropHook hook, float *ret)
 		{
 			ISendProxyCallbacks * pCallbacks = (ISendProxyCallbacks *)hook.sCallbackInfo.pCallback;
 			float flValue = *ret;
-			bool bChange = pCallbacks->OnEntityPropProxyFunctionCalls(gameents->EdictToBaseEntity(hook.pEnt), hook.pVar, (CBasePlayer *)gamehelpers->ReferenceToEntity(g_iCurrentClientIndexInLoop + 1), (void *)&flValue, hook.PropType, hook.Element);
+			bool bChange = pCallbacks->OnEntityPropProxyFunctionCalls(gameents->EdictToBaseEntity(hook.pEnt), hook.pVar, (CBasePlayer *)gamehelpers->ReferenceToEntity(g_iCurrentClientIndexInLoop + 1), (void *)&flValue, hook.propType, hook.Element);
 			if (bChange)
 			{
 				*ret = flValue;
@@ -1205,7 +1205,7 @@ bool CallFloatGamerules(SendPropHookGamerules hook, float *ret)
 		{
 			ISendProxyCallbacks * pCallbacks = (ISendProxyCallbacks *)hook.sCallbackInfo.pCallback;
 			float flValue = *ret;
-			bool bChange = pCallbacks->OnGamerulesPropProxyFunctionCalls(hook.pVar, (CBasePlayer *)gamehelpers->ReferenceToEntity(g_iCurrentClientIndexInLoop + 1), (void *)&flValue, hook.PropType, hook.Element);
+			bool bChange = pCallbacks->OnGamerulesPropProxyFunctionCalls(hook.pVar, (CBasePlayer *)gamehelpers->ReferenceToEntity(g_iCurrentClientIndexInLoop + 1), (void *)&flValue, hook.propType, hook.Element);
 			if (bChange)
 			{
 				*ret = flValue;
@@ -1249,7 +1249,7 @@ bool CallString(SendPropHook hook, char **ret)
 		{
 			ISendProxyCallbacks * pCallbacks = (ISendProxyCallbacks *)hook.sCallbackInfo.pCallback;
 			strncpynull(value, *ret, 4096);
-			bool bChange = pCallbacks->OnEntityPropProxyFunctionCalls(gameents->EdictToBaseEntity(hook.pEnt), hook.pVar, (CBasePlayer *)gamehelpers->ReferenceToEntity(g_iCurrentClientIndexInLoop + 1), (void *)value, hook.PropType, hook.Element);
+			bool bChange = pCallbacks->OnEntityPropProxyFunctionCalls(gameents->EdictToBaseEntity(hook.pEnt), hook.pVar, (CBasePlayer *)gamehelpers->ReferenceToEntity(g_iCurrentClientIndexInLoop + 1), (void *)value, hook.propType, hook.Element);
 			if (bChange)
 			{
 				*ret = value;
@@ -1301,7 +1301,7 @@ bool CallStringGamerules(SendPropHookGamerules hook, char **ret)
 				return false;
 			ISendProxyCallbacks * pCallbacks = (ISendProxyCallbacks *)hook.sCallbackInfo.pCallback;
 			strncpynull(value, *ret, 4096);
-			bool bChange = pCallbacks->OnGamerulesPropProxyFunctionCalls(hook.pVar, (CBasePlayer *)gamehelpers->ReferenceToEntity(g_iCurrentClientIndexInLoop + 1), (void *)value, hook.PropType, hook.Element);
+			bool bChange = pCallbacks->OnGamerulesPropProxyFunctionCalls(hook.pVar, (CBasePlayer *)gamehelpers->ReferenceToEntity(g_iCurrentClientIndexInLoop + 1), (void *)value, hook.propType, hook.Element);
 			if (bChange)
 			{
 				*ret = value;
@@ -1351,7 +1351,7 @@ bool CallVector(SendPropHook hook, Vector &vec)
 		{
 			ISendProxyCallbacks * pCallbacks = (ISendProxyCallbacks *)hook.sCallbackInfo.pCallback;
 			Vector vNewVec(vec.x, vec.y, vec.z);
-			bool bChange = pCallbacks->OnGamerulesPropProxyFunctionCalls(hook.pVar, (CBasePlayer *)gamehelpers->ReferenceToEntity(g_iCurrentClientIndexInLoop + 1), (void *)&vNewVec, hook.PropType, hook.Element);
+			bool bChange = pCallbacks->OnGamerulesPropProxyFunctionCalls(hook.pVar, (CBasePlayer *)gamehelpers->ReferenceToEntity(g_iCurrentClientIndexInLoop + 1), (void *)&vNewVec, hook.propType, hook.Element);
 			if (bChange)
 			{
 				vec.x = vNewVec.x;
@@ -1402,7 +1402,7 @@ bool CallVectorGamerules(SendPropHookGamerules hook, Vector &vec)
 		{
 			ISendProxyCallbacks * pCallbacks = (ISendProxyCallbacks *)hook.sCallbackInfo.pCallback;
 			Vector vNewVec(vec.x, vec.y, vec.z);
-			bool bChange = pCallbacks->OnGamerulesPropProxyFunctionCalls(hook.pVar, (CBasePlayer *)gamehelpers->ReferenceToEntity(g_iCurrentClientIndexInLoop + 1), (void *)&vNewVec, hook.PropType, hook.Element);
+			bool bChange = pCallbacks->OnGamerulesPropProxyFunctionCalls(hook.pVar, (CBasePlayer *)gamehelpers->ReferenceToEntity(g_iCurrentClientIndexInLoop + 1), (void *)&vNewVec, hook.propType, hook.Element);
 			if (bChange)
 			{
 				vec.x = vNewVec.x;
@@ -1424,7 +1424,7 @@ void GlobalProxy(const SendProp *pProp, const void *pStructBase, const void * pD
 	{
 		if (g_Hooks[i].objectID == objectID && g_Hooks[i].pVar == pProp && pEnt == g_Hooks[i].pEnt)
 		{
-			switch (g_Hooks[i].PropType)
+			switch (g_Hooks[i].propType)
 			{
 				case PropType::Prop_Int:
 				{
@@ -1521,7 +1521,7 @@ void GlobalProxyGamerules(const SendProp *pProp, const void *pStructBase, const 
 	{
 		if (g_HooksGamerules[i].pVar == pProp)
 		{
-			switch (g_HooksGamerules[i].PropType)
+			switch (g_HooksGamerules[i].propType)
 			{
 				case PropType::Prop_Int:
 				{
