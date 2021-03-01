@@ -102,6 +102,7 @@ struct SendPropHook
 	int										Offset;
 	int										Element{0};
 	CUtlVector<ListenerCallbackInfo> *		vListeners;
+	bool per_client;
 };
 
 struct SendPropHookGamerules
@@ -120,6 +121,7 @@ struct SendPropHookGamerules
 	PropType								propType;
 	int										Element{0};
 	CUtlVector<ListenerCallbackInfo> *		vListeners;
+	bool per_client;
 };
 
 struct PropChangeHook

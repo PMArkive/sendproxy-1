@@ -1,8 +1,7 @@
 #if !defined _SENDPROXYMANAGER_INC_
 #define _SENDPROXYMANAGER_INC_
 
-#define SENDPROXY_LIB "sendproxy13"
-#define SENDPROXY_PER_PLAYER
+#define SENDPROXY_LIB "sendproxy14"
 
 enum SendPropType {
 	Prop_Int,
@@ -18,6 +17,11 @@ typeset SendProxyCallback
 	function Action (const int iEntity, const char[] cPropName, float &flValue, const int iElement, const int iClient); //Prop_Float
 	function Action (const int iEntity, const char[] cPropName, char cModifiedValue[4096], const int iElement, const int iClient); //Prop_String
 	function Action (const int iEntity, const char[] cPropName, float vecValues[3], const int iElement, const int iClient); //Prop_Vector
+
+	function Action (const int iEntity, const char[] cPropName, int &iValue, const int iElement); //Prop_Int
+	function Action (const int iEntity, const char[] cPropName, float &flValue, const int iElement); //Prop_Float
+	function Action (const int iEntity, const char[] cPropName, char cModifiedValue[4096], const int iElement); //Prop_String
+	function Action (const int iEntity, const char[] cPropName, float vecValues[3], const int iElement); //Prop_Vector
 };
 
 typeset SendProxyCallbackGamerules
@@ -26,6 +30,11 @@ typeset SendProxyCallbackGamerules
 	function Action (const char[] cPropName, float &flValue, const int iElement, const int iClient); //Prop_Float
 	function Action (const char[] cPropName, char cModifiedValue[4096], const int iElement, const int iClient); //Prop_String
 	function Action (const char[] cPropName, float vecValues[3], const int iElement, const int iClient); //Prop_Vector
+
+	function Action (const char[] cPropName, int &iValue, const int iElement); //Prop_Int
+	function Action (const char[] cPropName, float &flValue, const int iElement); //Prop_Float
+	function Action (const char[] cPropName, char cModifiedValue[4096], const int iElement); //Prop_String
+	function Action (const char[] cPropName, float vecValues[3], const int iElement); //Prop_Vector
 };
 
 typeset PropChangedCallback
@@ -45,8 +54,8 @@ typeset GameRulesPropChangedCallback
 };
 
 //Returns true upon success, false upon failure
-native bool SendProxy_Hook(const int iEntity, const char[] cPropName, const SendPropType stType, const SendProxyCallback pCallback);
-native bool SendProxy_HookGameRules(const char[] cPropName, const SendPropType stType, const SendProxyCallbackGamerules pCallback);
+native bool SendProxy_Hook(const int iEntity, const char[] cPropName, const SendPropType stType, const SendProxyCallback pCallback, bool per_client);
+native bool SendProxy_HookGameRules(const char[] cPropName, const SendPropType stType, const SendProxyCallbackGamerules pCallback, bool per_client);
 native bool SendProxy_HookArrayProp(const int iEntity, const char[] cPropName, const int iElement, const SendPropType stType, const SendProxyCallback pCallback);
 native bool SendProxy_UnhookArrayProp(const int iEntity, const char[] cPropName, const int iElement, const SendPropType stType, const SendProxyCallback pCallback);
 native bool SendProxy_Unhook(const int iEntity, const char[] cPropName, const SendProxyCallback pCallback);

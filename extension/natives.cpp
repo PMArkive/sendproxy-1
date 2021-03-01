@@ -249,6 +249,7 @@ static cell_t Native_Hook(IPluginContext * pContext, const cell_t * params)
 	hook.sCallbackInfo.iCallbackType = CallBackType::Callback_PluginFunction;
 	hook.sCallbackInfo.pOwner = (void *)pContext;
 	hook.pEnt = pEnt;
+	hook.per_client = params[5];
 	bool bHookedAlready = false;
 	for (int i = 0; i < g_Hooks.Count(); i++)
 	{
@@ -325,6 +326,7 @@ static cell_t Native_HookGameRules(IPluginContext * pContext, const cell_t * par
 		hook.pRealProxy = pProp->GetProxyFn();
 	hook.propType = propType;
 	hook.pVar = pProp;
+	hook.per_client = params[4];
 	
 	//if this prop has been hooked already, don't set the proxy again
 	if (bHookedAlready)

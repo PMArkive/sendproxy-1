@@ -44,10 +44,10 @@ public: //SMInterface
 	virtual const char * GetInterfaceName() override;
 	virtual unsigned int GetInterfaceVersion() override;
 public: //interface impl:
-	virtual bool HookProxy(IExtension *, SendProp *, CBaseEntity *, PropType, CallBackType, void *) override;
-	virtual bool HookProxy(IExtension *, const char *, CBaseEntity *, PropType, CallBackType, void *) override;
-	virtual bool HookProxyGamerules(IExtension *, SendProp *, PropType, CallBackType, void *) override;
-	virtual bool HookProxyGamerules(IExtension *, const char *, PropType, CallBackType, void *) override;
+	virtual bool HookProxy(IExtension *, SendProp *, CBaseEntity *, PropType, CallBackType, void *, bool) override;
+	virtual bool HookProxy(IExtension *, const char *, CBaseEntity *, PropType, CallBackType, void *, bool) override;
+	virtual bool HookProxyGamerules(IExtension *, SendProp *, PropType, CallBackType, void *, bool) override;
+	virtual bool HookProxyGamerules(IExtension *, const char *, PropType, CallBackType, void *, bool) override;
 	virtual bool UnhookProxy(IExtension *, SendProp *, CBaseEntity *, CallBackType, void *) override;
 	virtual bool UnhookProxy(IExtension *, const char *, CBaseEntity *, CallBackType, void *) override;
 	virtual bool UnhookProxyGamerules(IExtension *, SendProp *, CallBackType, void *) override;

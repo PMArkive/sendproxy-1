@@ -188,7 +188,7 @@ void CallListenersForHookIDGamerules(int iHookID)
 const char * SendProxyManagerInterfaceImpl::GetInterfaceName() { return SMINTERFACE_SENDPROXY_NAME; }
 unsigned int SendProxyManagerInterfaceImpl::GetInterfaceVersion() { return SMINTERFACE_SENDPROXY_VERSION; }
 
-bool SendProxyManagerInterfaceImpl::HookProxy(IExtension * pExt, SendProp * pProp, CBaseEntity * pEntity, PropType iType, CallBackType iCallbackType, void * pCallback)
+bool SendProxyManagerInterfaceImpl::HookProxy(IExtension * pExt, SendProp * pProp, CBaseEntity * pEntity, PropType iType, CallBackType iCallbackType, void * pCallback, bool per_client)
 {
 	if (!pEntity)
 		return false;
@@ -208,6 +208,7 @@ bool SendProxyManagerInterfaceImpl::HookProxy(IExtension * pExt, SendProp * pPro
 	hook.propType = iType;
 	hook.pEnt = pEdict;
 	hook.pVar = pProp;
+	hook.per_client = per_client;
 	bool bHookedAlready = false;
 	for (int i = 0; i < g_Hooks.Count(); i++)
 	{
@@ -234,7 +235,7 @@ bool SendProxyManagerInterfaceImpl::HookProxy(IExtension * pExt, SendProp * pPro
 	return true;
 }
 
-bool SendProxyManagerInterfaceImpl::HookProxy(IExtension * pExt, const char * pProp, CBaseEntity * pEntity, PropType iType, CallBackType iCallbackType, void * pCallback)
+bool SendProxyManagerInterfaceImpl::HookProxy(IExtension * pExt, const char * pProp, CBaseEntity * pEntity, PropType iType, CallBackType iCallbackType, void * pCallback, bool per_client)
 {
 	if (!pProp || !*pProp)
 		return false;
@@ -247,11 +248,11 @@ bool SendProxyManagerInterfaceImpl::HookProxy(IExtension * pExt, const char * pP
 	gamehelpers->FindSendPropInfo(sc->GetName(), pProp, &info);
 	SendProp * pSendProp = info.prop;
 	if (pSendProp)
-		return HookProxy(pExt, pSendProp, pEntity, iType, iCallbackType, pCallback);
+		return HookProxy(pExt, pSendProp, pEntity, iType, iCallbackType, pCallback, per_client);
 	return false;
 }
 
-bool SendProxyManagerInterfaceImpl::HookProxyGamerules(IExtension * pExt, SendProp * pProp, PropType iType, CallBackType iCallbackType, void * pCallback)
+bool SendProxyManagerInterfaceImpl::HookProxyGamerules(IExtension * pExt, SendProp * pProp, PropType iType, CallBackType iCallbackType, void * pCallback, bool per_client)
 {
 	if (!IsPropValid(pProp, iType))
 		return false;
@@ -274,6 +275,7 @@ bool SendProxyManagerInterfaceImpl::HookProxyGamerules(IExtension * pExt, SendPr
 		hook.pRealProxy = pProp->GetProxyFn();
 	hook.propType = iType;
 	hook.pVar = pProp;
+	hook.per_client = per_client;
 	sm_sendprop_info_t info;
 	gamehelpers->FindSendPropInfo(g_szGameRulesProxy, pProp->GetName(), &info);
 	
@@ -295,7 +297,7 @@ bool SendProxyManagerInterfaceImpl::HookProxyGamerules(IExtension * pExt, SendPr
 	return false;
 }
 
-bool SendProxyManagerInterfaceImpl::HookProxyGamerules(IExtension * pExt, const char * pProp, PropType iType, CallBackType iCallbackType, void * pCallback)
+bool SendProxyManagerInterfaceImpl::HookProxyGamerules(IExtension * pExt, const char * pProp, PropType iType, CallBackType iCallbackType, void * pCallback, bool per_client)
 {
 	if (!pProp || !*pProp)
 		return false;
@@ -303,7 +305,7 @@ bool SendProxyManagerInterfaceImpl::HookProxyGamerules(IExtension * pExt, const 
 	gamehelpers->FindSendPropInfo(g_szGameRulesProxy, pProp, &info);
 	SendProp * pSendProp = info.prop;
 	if (pSendProp)
-		return HookProxyGamerules(pExt, pSendProp, iType, iCallbackType, pCallback);
+		return HookProxyGamerules(pExt, pSendProp, iType, iCallbackType, pCallback, per_client);
 	return false;
 }
 

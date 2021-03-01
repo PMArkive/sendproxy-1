@@ -39,8 +39,8 @@
 #include "dt_send.h"
 #include "server_class.h"
 
-#define SMINTERFACE_SENDPROXY_NAME		"ISendProxyInterface133"
-#define SMINTERFACE_SENDPROXY_VERSION	0x133
+#define SMINTERFACE_SENDPROXY_NAME		"ISendProxyInterface134"
+#define SMINTERFACE_SENDPROXY_VERSION	0x134
 
 class CBaseEntity;
 class CBasePlayer;
@@ -107,6 +107,8 @@ public:
 	 * @return				true, to use changed value, false, to use original
 	 */
 	virtual bool OnEntityPropProxyFunctionCalls(const CBaseEntity * pEntity, const SendProp * pProp, const CBasePlayer * pPlayer, void * pValue, const PropType iType, const int iElement) = 0;
+	virtual bool OnEntityPropProxyFunctionCalls(const CBaseEntity * pEntity, const SendProp * pProp, void * pValue, const PropType iType, const int iElement) = 0;
+
 	/*
 	 * Calls when proxy function of gamerules prop is called
 	 *
@@ -119,6 +121,7 @@ public:
 	 * @return				true, to use changed value, false, to use original
 	 */
 	virtual bool OnGamerulesPropProxyFunctionCalls(const SendProp * pProp, const CBasePlayer * pPlayer, void * pValue, const PropType iType, const int iElement) = 0;
+	virtual bool OnGamerulesPropProxyFunctionCalls(const SendProp * pProp, void * pValue, const PropType iType, const int iElement) = 0;
 };
 
 class ISendProxyChangeCallbacks
@@ -170,8 +173,8 @@ public: //ISendProxyManager
 	 *
 	 * @return				true, if prop hooked, false otherwise
 	 */
-	virtual bool HookProxy(IExtension * pMyself, SendProp * pProp, CBaseEntity * pEntity, PropType iType, CallBackType iCallbackType, void * pCallback) = 0;
-	virtual bool HookProxy(IExtension * pMyself, const char * pProp, CBaseEntity * pEntity, PropType iType, CallBackType iCallbackType, void * pCallback) = 0;
+	virtual bool HookProxy(IExtension * pMyself, SendProp * pProp, CBaseEntity * pEntity, PropType iType, CallBackType iCallbackType, void * pCallback, bool per_client) = 0;
+	virtual bool HookProxy(IExtension * pMyself, const char * pProp, CBaseEntity * pEntity, PropType iType, CallBackType iCallbackType, void * pCallback, bool per_client) = 0;
 	/*
 	 * Hooks gamerules SendProp, this hook removes automatically when extension in unloaded.
 	 *
@@ -183,8 +186,8 @@ public: //ISendProxyManager
 	 *
 	 * @return				true, if prop hooked, false otherwise
 	 */
-	virtual bool HookProxyGamerules(IExtension * pMyself, SendProp * pProp, PropType iType, CallBackType iCallbackType, void * pCallback) = 0;
-	virtual bool HookProxyGamerules(IExtension * pMyself, const char * pProp, PropType iType, CallBackType iCallbackType, void * pCallback) = 0;
+	virtual bool HookProxyGamerules(IExtension * pMyself, SendProp * pProp, PropType iType, CallBackType iCallbackType, void * pCallback, bool per_client) = 0;
+	virtual bool HookProxyGamerules(IExtension * pMyself, const char * pProp, PropType iType, CallBackType iCallbackType, void * pCallback, bool per_client) = 0;
 	/*
 	 * Unhooks SendProp of entity
 	 *
