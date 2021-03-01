@@ -53,6 +53,38 @@
 #include <../public/iserver.h>
 #include <../public/iclient.h>
 
+#define DECL_DETOUR(name) \
+	CDetour *name##_Detour = nullptr;
+
+#define CREATE_DETOUR(name, signname, var) \
+	name##_Detour = DETOUR_CREATE_MEMBER(name, signname); \
+	if (name##_Detour != NULL) \
+	{ \
+		name##_Detour->EnableDetour(); \
+		var = true; \
+	} else { \
+		g_pSM->LogError(myself, "Failed to create " signname " detour, check error log.\n"); \
+		var = false; \
+	}
+
+#define CREATE_DETOUR_STATIC(name, signname, var) \
+	name##_Detour = DETOUR_CREATE_STATIC(name, signname); \
+	if (name##_Detour != NULL) \
+	{ \
+		name##_Detour->EnableDetour(); \
+		var = true; \
+	} else { \
+		g_pSM->LogError(myself, "Failed to create " signname " detour, check error log.\n"); \
+		var = false; \
+	}
+
+#define DESTROY_DETOUR(name) \
+	if (name##_Detour != nullptr) \
+{ \
+	name##_Detour->Destroy(); \
+	name##_Detour = nullptr; \
+}
+
 SH_DECL_HOOK1_void(IServerGameClients, ClientDisconnect, SH_NOATTRIB, false, edict_t *);
 SH_DECL_HOOK1_void(IServerGameDLL, GameFrame, SH_NOATTRIB, false, bool);
 SH_DECL_HOOK0(IServer, GetClientCount, const, false, int);

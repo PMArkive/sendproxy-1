@@ -1,5 +1,32 @@
 "Games"
 {
+	"#default"
+	{
+		"#supported"
+		{
+			"game"	"tf"
+			"game"	"left4dead2"
+		}
+
+		"Signatures"
+		{
+			"CGameClient::ShouldSendMessages"
+			{
+				"library"			"engine"
+				"linux"				"@_ZN11CGameClient18ShouldSendMessagesEv"
+			}
+			"CGameServer::SendClientMessages"
+			{
+				"library"			"engine"
+				"linux"				"@_ZN11CGameServer18SendClientMessagesEb"
+			}
+			"SV_ComputeClientPacks"
+			{
+				"library"			"engine"
+				"linux"				"@_Z21SV_ComputeClientPacksiPP11CGameClientP14CFrameSnapshot"
+			}
+		}
+	}
 	"tf"
 	{
 		"Signatures"
@@ -8,19 +35,16 @@
 			{
 				"library"			"engine"
 				"windows"			"\x55\x8B\xEC\x51\x56\x8B\xF1\x80\xBE\x94\x00\x00\x00\x00"
-				"linux"				"@_ZN11CGameClient18ShouldSendMessagesEv"
 			}
 			"CGameServer::SendClientMessages"
 			{
 				"library"			"engine"
 				"windows"			"\x55\x8B\xEC\x81\xEC\x30\x04\x00\x00\x53\x56\x57\x33\xDB"
-				"linux"				"@_ZN11CGameServer18SendClientMessagesEb"
 			}
 			"SV_ComputeClientPacks"
 			{
 				"library"			"engine"
 				"windows"			"\x55\x8B\xEC\x83\xEC\x38\x8B\x0D\x2A\x2A\x2A\x2A\x53\x33\xDB"
-				"linux"				"@_Z21SV_ComputeClientPacksiPP11CGameClientP14CFrameSnapshot"
 			}
 		}
 	}

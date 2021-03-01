@@ -8,6 +8,7 @@ builder.SetBuildFolder('package')
 # Add any folders you need to this list
 folder_list = [
   'addons/sourcemod/extensions',
+  'addons/sourcemod/gamedata',
   'addons/sourcemod/scripting/include',
 ]
 
@@ -26,11 +27,15 @@ def CopyFiles(src, dest, files):
     source_path = os.path.join(builder.sourcePath, src, source_file)
     builder.AddCopy(source_path, dest_entry)
 
+# Include files 
+CopyFiles('include', 'addons/sourcemod/scripting/include',
+  [ '../../addons/sourcemod/scripting/include/sendproxy.inc', ]
+)
+
 # GameData files
-#CopyFiles('gamedata', 'addons/sourcemod/gamedata',
-#  [ '../../addons/sourcemod/gamedata/sendproxy.txt',
-#  ]
-#)
+CopyFiles('gamedata', 'addons/sourcemod/gamedata',
+  [ '../../addons/sourcemod/gamedata/sendproxy.txt',]
+)
 
 # Config Files
 #CopyFiles('configs', 'addons/sourcemod/configs',
