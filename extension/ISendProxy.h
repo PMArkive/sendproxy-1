@@ -173,8 +173,8 @@ public: //ISendProxyManager
 	 *
 	 * @return				true, if prop hooked, false otherwise
 	 */
-	virtual bool HookProxy(IExtension * pMyself, SendProp * pProp, CBaseEntity * pEntity, PropType iType, CallBackType iCallbackType, void * pCallback, bool per_client) = 0;
-	virtual bool HookProxy(IExtension * pMyself, const char * pProp, CBaseEntity * pEntity, PropType iType, CallBackType iCallbackType, void * pCallback, bool per_client) = 0;
+	virtual bool HookProxy(IExtension * pMyself, SendProp * pProp, CBaseEntity * pEntity, PropType iType, CallBackType iCallbackType, void * pCallback, bool per_client = false) = 0;
+	virtual bool HookProxy(IExtension * pMyself, const char * pProp, CBaseEntity * pEntity, PropType iType, CallBackType iCallbackType, void * pCallback, bool per_client = false) = 0;
 	/*
 	 * Hooks gamerules SendProp, this hook removes automatically when extension in unloaded.
 	 *
@@ -186,8 +186,8 @@ public: //ISendProxyManager
 	 *
 	 * @return				true, if prop hooked, false otherwise
 	 */
-	virtual bool HookProxyGamerules(IExtension * pMyself, SendProp * pProp, PropType iType, CallBackType iCallbackType, void * pCallback, bool per_client) = 0;
-	virtual bool HookProxyGamerules(IExtension * pMyself, const char * pProp, PropType iType, CallBackType iCallbackType, void * pCallback, bool per_client) = 0;
+	virtual bool HookProxyGamerules(IExtension * pMyself, SendProp * pProp, PropType iType, CallBackType iCallbackType, void * pCallback, bool per_client = false) = 0;
+	virtual bool HookProxyGamerules(IExtension * pMyself, const char * pProp, PropType iType, CallBackType iCallbackType, void * pCallback, bool per_client = false) = 0;
 	/*
 	 * Unhooks SendProp of entity
 	 *
