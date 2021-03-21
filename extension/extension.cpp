@@ -102,7 +102,7 @@ int g_iCurrentClientIndexInLoop = -1; //used for optimization
 bool g_bCurrentGameClientCallFwd = false;
 bool g_bCallingForNullClients = false;
 bool g_bFirstTimeCalled = true;
-bool g_bSVComputePacksDone = false;
+bool g_bSVComputePacksDone = true;
 IServer * g_pIServer = nullptr;
 
 SendProxyManager g_SendProxyManager;
@@ -739,6 +739,8 @@ bool SendProxyManager::AddHookToList(SendPropHook hook)
 	if(hook.per_client) {
 		if(++g_numPerClientHooks == 1) {
 			bool bDetoursInited = false;
+			g_bSVComputePacksDone = false;
+			g_iCurrentClientIndexInLoop = -1;
 			CREATE_DETOUR(CGameServer_SendClientMessages, "CGameServer::SendClientMessages", bDetoursInited);
 			CREATE_DETOUR(CGameClient_ShouldSendMessages, "CGameClient::ShouldSendMessages", bDetoursInited);
 			CREATE_DETOUR_STATIC(SV_ComputeClientPacks, "SV_ComputeClientPacks", bDetoursInited);
@@ -763,6 +765,8 @@ bool SendProxyManager::AddHookToListGamerules(SendPropHookGamerules hook)
 	if(hook.per_client) {
 		if(++g_numPerClientHooks == 1) {
 			bool bDetoursInited = false;
+			g_bSVComputePacksDone = false;
+			g_iCurrentClientIndexInLoop = -1;
 			CREATE_DETOUR(CGameServer_SendClientMessages, "CGameServer::SendClientMessages", bDetoursInited);
 			CREATE_DETOUR(CGameClient_ShouldSendMessages, "CGameClient::ShouldSendMessages", bDetoursInited);
 			CREATE_DETOUR_STATIC(SV_ComputeClientPacks, "SV_ComputeClientPacks", bDetoursInited);
@@ -871,6 +875,7 @@ void SendProxyManager::UnhookProxy(int i)
 			DESTROY_DETOUR(CGameClient_ShouldSendMessages);
 			DESTROY_DETOUR(SV_ComputeClientPacks);
 			g_iCurrentClientIndexInLoop = -1;
+			g_bSVComputePacksDone = true;
 		}
 	}
 	
@@ -903,6 +908,7 @@ void SendProxyManager::UnhookProxyGamerules(int i)
 			DESTROY_DETOUR(CGameClient_ShouldSendMessages);
 			DESTROY_DETOUR(SV_ComputeClientPacks);
 			g_iCurrentClientIndexInLoop = -1;
+			g_bSVComputePacksDone = true;
 		}
 	}
 	
