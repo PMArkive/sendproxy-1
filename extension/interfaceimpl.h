@@ -35,8 +35,8 @@
 #include "extension.h"
 #include "ISendProxy.h"
 
-void CallListenersForHookID(int iID);
-void CallListenersForHookIDGamerules(int iID);
+void CallListenersForHook(const SendPropHook &hook);
+void CallListenersForHookGamerules(const SendPropHookGamerules &hook);
 
 class SendProxyManagerInterfaceImpl : public ISendProxyManager
 {

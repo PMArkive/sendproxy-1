@@ -49,15 +49,21 @@ static cell_t Native_UnhookPropChange(IPluginContext * pContext, const cell_t * 
 	gamehelpers->FindSendPropInfo(sc->GetName(), name, &info);
 	IPluginFunction * callback = pContext->GetFunctionById(params[3]);
 
-	for (int i = 0; i < g_ChangeHooks.Count(); i++)
+	auto it = g_ChangeHooks.begin();
+	while(it != g_ChangeHooks.end())
 	{
-		if (g_ChangeHooks[i].objectID == entity && g_ChangeHooks[i].pVar == info.prop)
+		auto &hook = *it;
+		
+		if (hook.objectID == entity &&
+			hook.pVar == info.prop)
 		{
 			CallBackInfo sInfo;
 			sInfo.pCallback = callback;
 			sInfo.pOwner = (void *)pContext;
 			sInfo.iCallbackType = CallBackType::Callback_PluginFunction;
-			g_SendProxyManager.UnhookChange(i, &sInfo);
+			if(g_SendProxyManager.UnhookChange(hook, sInfo)) {
+				g_ChangeHooks.erase(it);
+			}
 			break;
 		}
 	}
@@ -72,15 +78,20 @@ static cell_t Native_UnhookPropChangeGameRules(IPluginContext * pContext, const 
 	sm_sendprop_info_t info;
 	gamehelpers->FindSendPropInfo(g_szGameRulesProxy, name, &info);
 	
-	for (int i = 0; i < g_ChangeHooksGamerules.Count(); i++)
+	auto it = g_ChangeHooksGamerules.begin();
+	while(it != g_ChangeHooksGamerules.end())
 	{
-		if (g_ChangeHooksGamerules[i].pVar == info.prop)
+		auto &hook = *it;
+		
+		if (hook.pVar == info.prop)
 		{
 			CallBackInfo sInfo;
 			sInfo.pCallback = callback;
 			sInfo.pOwner = (void *)pContext;
 			sInfo.iCallbackType = CallBackType::Callback_PluginFunction;
-			g_SendProxyManager.UnhookChangeGamerules(i, &sInfo);
+			if(g_SendProxyManager.UnhookChangeGamerules(hook, sInfo)) {
+				g_ChangeHooksGamerules.erase(it);
+			}
 			break;
 		}
 	}
@@ -120,7 +131,7 @@ static cell_t Native_HookPropChange(IPluginContext * pContext, const cell_t * pa
 	else
 		callback = pContext->GetFunctionById(params[3]);
 
-	if (bSafeCheck && !IsPropValid(pProp, propType))
+	if (bSafeCheck && !IsPropValid(pProp, propType)) {
 		switch (propType)
 		{
 		case PropType::Prop_Int:
@@ -134,6 +145,7 @@ static cell_t Native_HookPropChange(IPluginContext * pContext, const cell_t * pa
 		default:
 			return pContext->ThrowNativeError("Unsupported prop type %d", propType);
 		}
+	}
 
 	PropChangeHook hook;
 	hook.objectID = entity;
@@ -143,7 +155,7 @@ static cell_t Native_HookPropChange(IPluginContext * pContext, const cell_t * pa
 	sCallInfo.iCallbackType = CallBackType::Callback_PluginFunction;
 	sCallInfo.pCallback = (void *)callback;
 	sCallInfo.pOwner = (void *)pContext;
-	if (!g_SendProxyManager.AddChangeHookToList(hook, &sCallInfo))
+	if (!g_SendProxyManager.AddChangeHookToList(std::move(hook), std::move(sCallInfo)))
 		return pContext->ThrowNativeError("Entity %d isn't valid", entity);
 	return 1;
 }
@@ -170,7 +182,7 @@ static cell_t Native_HookPropChangeGameRules(IPluginContext * pContext, const ce
 	else
 		callback = pContext->GetFunctionById(params[2]);
 
-	if (bSafeCheck && !IsPropValid(pProp, propType))
+	if (bSafeCheck && !IsPropValid(pProp, propType)) {
 		switch (propType)
 		{
 		case PropType::Prop_Int:
@@ -184,6 +196,7 @@ static cell_t Native_HookPropChangeGameRules(IPluginContext * pContext, const ce
 		default:
 			return pContext->ThrowNativeError("Unsupported prop type %d", propType);
 		}
+	}
 
 	if (!g_pGameRules)
 	{
@@ -201,7 +214,7 @@ static cell_t Native_HookPropChangeGameRules(IPluginContext * pContext, const ce
 	sCallInfo.iCallbackType = CallBackType::Callback_PluginFunction;
 	sCallInfo.pCallback = (void *)callback;
 	sCallInfo.pOwner = (void *)pContext;
-	if (!g_SendProxyManager.AddChangeHookToListGamerules(hook, &sCallInfo))
+	if (!g_SendProxyManager.AddChangeHookToListGamerules(std::move(hook), std::move(sCallInfo)))
 		return pContext->ThrowNativeError("Prop type %d isn't valid", pProp->GetType()); //should never happen
 	return 1;
 }
@@ -228,7 +241,7 @@ static cell_t Native_Hook(IPluginContext * pContext, const cell_t * params)
 		return pContext->ThrowNativeError("Could not find prop %s", name);
 
 	PropType propType = static_cast<PropType>(params[3]);
-	if (!IsPropValid(pProp, propType))
+	if (!IsPropValid(pProp, propType)) {
 		switch (propType)
 		{
 			case PropType::Prop_Int: 
@@ -242,6 +255,7 @@ static cell_t Native_Hook(IPluginContext * pContext, const cell_t * params)
 			default:
 				return pContext->ThrowNativeError("Unsupported prop type %d", propType);
 		}
+	}
 	
 	SendPropHook hook;
 	hook.objectID = entity;
@@ -251,11 +265,11 @@ static cell_t Native_Hook(IPluginContext * pContext, const cell_t * params)
 	hook.pEnt = pEnt;
 	hook.per_client = params[5];
 	bool bHookedAlready = false;
-	for (int i = 0; i < g_Hooks.Count(); i++)
+	for (auto &it : g_Hooks)
 	{
-		if (g_Hooks[i].pVar == pProp)
+		if (it.pVar == pProp)
 		{
-			hook.pRealProxy = g_Hooks[i].pRealProxy;
+			hook.pRealProxy = it.pRealProxy;
 			bHookedAlready = true;
 			break;
 		}
@@ -268,11 +282,11 @@ static cell_t Native_Hook(IPluginContext * pContext, const cell_t * params)
 	//if this prop has been hooked already, don't set the proxy again
 	if (bHookedAlready)
 	{
-		if (g_SendProxyManager.AddHookToList(hook))
+		if (g_SendProxyManager.AddHookToList(std::move(hook)))
 			return 1;
 		return 0;
 	}
-	if (g_SendProxyManager.AddHookToList(hook))
+	if (g_SendProxyManager.AddHookToList(std::move(hook)))
 	{
 		pProp->SetProxyFn(GlobalProxy);
 		return 1;
@@ -293,7 +307,7 @@ static cell_t Native_HookGameRules(IPluginContext * pContext, const cell_t * par
 		return pContext->ThrowNativeError("Could not find prop %s", name);
 
 	PropType propType = static_cast<PropType>(params[2]);
-	if (!IsPropValid(pProp, propType))
+	if (!IsPropValid(pProp, propType)) {
 		switch (propType)
 		{
 			case PropType::Prop_Int: 
@@ -307,17 +321,18 @@ static cell_t Native_HookGameRules(IPluginContext * pContext, const cell_t * par
 			default:
 				return pContext->ThrowNativeError("Unsupported prop type %d", propType);
 		}
+	}
 
 	SendPropHookGamerules hook;
 	hook.sCallbackInfo.pCallback = (void *)pContext->GetFunctionById(params[3]);
 	hook.sCallbackInfo.iCallbackType = CallBackType::Callback_PluginFunction;
 	hook.sCallbackInfo.pOwner = (void *)pContext;
 	bool bHookedAlready = false;
-	for (int i = 0; i < g_HooksGamerules.Count(); i++)
+	for (auto &it : g_HooksGamerules)
 	{
-		if (g_HooksGamerules[i].pVar == pProp)
+		if (it.pVar == pProp)
 		{
-			hook.pRealProxy = g_HooksGamerules[i].pRealProxy;
+			hook.pRealProxy = it.pRealProxy;
 			bHookedAlready = true;
 			break;
 		}
@@ -331,11 +346,11 @@ static cell_t Native_HookGameRules(IPluginContext * pContext, const cell_t * par
 	//if this prop has been hooked already, don't set the proxy again
 	if (bHookedAlready)
 	{
-		if (g_SendProxyManager.AddHookToListGamerules(hook))
+		if (g_SendProxyManager.AddHookToListGamerules(std::move(hook)))
 			return 1;
 		return 0;
 	}
-	if (g_SendProxyManager.AddHookToListGamerules(hook))
+	if (g_SendProxyManager.AddHookToListGamerules(std::move(hook)))
 	{
 		pProp->SetProxyFn(GlobalProxyGamerules);
 		return 1;
@@ -375,7 +390,7 @@ static cell_t Native_HookArrayProp(IPluginContext * pContext, const cell_t * par
 
 	PropType propType = static_cast<PropType>(params[4]);
 
-	if (!IsPropValid(pProp, propType))
+	if (!IsPropValid(pProp, propType)) {
 		switch (propType)
 		{
 			case PropType::Prop_Int: 
@@ -389,6 +404,7 @@ static cell_t Native_HookArrayProp(IPluginContext * pContext, const cell_t * par
 			default:
 				return pContext->ThrowNativeError("Unsupported prop type %d", propType);
 		}
+	}
 	
 	SendPropHook hook;
 	hook.objectID = entity;
@@ -398,11 +414,11 @@ static cell_t Native_HookArrayProp(IPluginContext * pContext, const cell_t * par
 	hook.pEnt = pEnt;
 	hook.Element = element;
 	bool bHookedAlready = false;
-	for (int i = 0; i < g_Hooks.Count(); i++)
+	for (auto &it : g_Hooks)
 	{
-		if (g_Hooks[i].pVar == pProp)
+		if (it.pVar == pProp)
 		{
-			hook.pRealProxy = g_Hooks[i].pRealProxy;
+			hook.pRealProxy = it.pRealProxy;
 			bHookedAlready = true;
 			break;
 		}
@@ -414,11 +430,11 @@ static cell_t Native_HookArrayProp(IPluginContext * pContext, const cell_t * par
 	
 	if (bHookedAlready)
 	{
-		if (g_SendProxyManager.AddHookToList(hook))
+		if (g_SendProxyManager.AddHookToList(std::move(hook)))
 			return 1;
 		return 0;
 	}
-	if (g_SendProxyManager.AddHookToList(hook))
+	if (g_SendProxyManager.AddHookToList(std::move(hook)))
 	{
 		pProp->SetProxyFn(GlobalProxy);
 		return 1;
@@ -437,14 +453,25 @@ static cell_t Native_UnhookArrayProp(IPluginContext * pContext, const cell_t * p
 	int element = params[3];
 	PropType propType = static_cast<PropType>(params[4]);
 	IPluginFunction * callback = pContext->GetFunctionById(params[5]);
-	for (int i = 0; i < g_Hooks.Count(); i++)
+	auto it = g_Hooks.begin();
+	while(it != g_Hooks.end())
 	{
+		auto &hook = *it;
+		
 		//we check callback here, so, we do not need to check owner
-		if (g_Hooks[i].Element == element && g_Hooks[i].sCallbackInfo.iCallbackType == CallBackType::Callback_PluginFunction && g_Hooks[i].propType == propType && g_Hooks[i].sCallbackInfo.pCallback == (void *)callback && !strcmp(g_Hooks[i].pVar->GetName(), propName) && g_Hooks[i].objectID == entity)
+		if (hook.Element == element &&
+			hook.sCallbackInfo.iCallbackType == CallBackType::Callback_PluginFunction &&
+			hook.propType == propType &&
+			hook.sCallbackInfo.pCallback == (void *)callback &&
+			!strcmp(hook.pVar->GetName(), propName) &&
+			hook.objectID == entity)
 		{
-			g_SendProxyManager.UnhookProxy(i);
+			g_SendProxyManager.UnhookProxy(hook);
+			g_Hooks.erase(it);
 			return 1;
 		}
+		
+		++it;
 	}
 	return 0;
 }
@@ -454,14 +481,23 @@ static cell_t Native_Unhook(IPluginContext * pContext, const cell_t * params)
 	char * propName;
 	pContext->LocalToString(params[2], &propName);
 	IPluginFunction * pFunction = pContext->GetFunctionById(params[3]);
-	for (int i = 0; i < g_Hooks.Count(); i++)
+	auto it = g_Hooks.begin();
+	while(it != g_Hooks.end())
 	{
+		auto &hook = *it;
+		
 		//we check callback here, so, we do not need to check owner
-		if (params[1] == g_Hooks[i].objectID && g_Hooks[i].sCallbackInfo.iCallbackType == CallBackType::Callback_PluginFunction && strcmp(g_Hooks[i].pVar->GetName(), propName) == 0 && (void *)pFunction == g_Hooks[i].sCallbackInfo.pCallback)
+		if (params[1] == hook.objectID &&
+			hook.sCallbackInfo.iCallbackType == CallBackType::Callback_PluginFunction &&
+			strcmp(hook.pVar->GetName(), propName) == 0 &&
+			(void *)pFunction == hook.sCallbackInfo.pCallback)
 		{
-			g_SendProxyManager.UnhookProxy(i);
+			g_SendProxyManager.UnhookProxy(hook);
+			g_Hooks.erase(it);
 			return 1;
 		}
+		
+		++it;
 	}
 	return 0;
 }
@@ -471,14 +507,22 @@ static cell_t Native_UnhookGameRules(IPluginContext * pContext, const cell_t * p
 	char * propName;
 	pContext->LocalToString(params[1], &propName);
 	IPluginFunction * pFunction = pContext->GetFunctionById(params[2]);
-	for (int i = 0; i < g_HooksGamerules.Count(); i++)
+	auto it = g_HooksGamerules.begin();
+	while(it != g_HooksGamerules.end())
 	{
+		auto &hook = *it;
+		
 		//we check callback here, so, we do not need to check owner
-		if (g_HooksGamerules[i].sCallbackInfo.iCallbackType == CallBackType::Callback_PluginFunction && strcmp(g_HooksGamerules[i].pVar->GetName(), propName) == 0 && (void *)pFunction == g_HooksGamerules[i].sCallbackInfo.pCallback)
+		if (hook.sCallbackInfo.iCallbackType == CallBackType::Callback_PluginFunction &&
+			strcmp(hook.pVar->GetName(), propName) == 0 &&
+			(void *)pFunction == hook.sCallbackInfo.pCallback)
 		{
-			g_SendProxyManager.UnhookProxyGamerules(i);
+			g_SendProxyManager.UnhookProxyGamerules(hook);
+			g_HooksGamerules.erase(it);
 			return 1;
 		}
+		
+		++it;
 	}
 	return 0;
 }
@@ -489,10 +533,13 @@ static cell_t Native_IsHooked(IPluginContext * pContext, const cell_t * params)
 	char * propName;
 	pContext->LocalToString(params[2], &propName);
 
-	for (int i = 0; i < g_Hooks.Count(); i++)
+	for (auto &it : g_Hooks)
 	{
-		if (g_Hooks[i].objectID == objectID && g_Hooks[i].sCallbackInfo.pOwner == (void *)pContext && strcmp(propName, g_Hooks[i].pVar->GetName()) == 0)
+		if (it.objectID == objectID &&
+			it.sCallbackInfo.pOwner == (void *)pContext &&
+			strcmp(propName, it.pVar->GetName()) == 0) {
 			return 1;
+		}
 	}
 	return 0;
 }
@@ -502,10 +549,12 @@ static cell_t Native_IsHookedGameRules(IPluginContext * pContext, const cell_t *
 	char * propName;
 	pContext->LocalToString(params[1], &propName);
 
-	for (int i = 0; i < g_HooksGamerules.Count(); i++)
+	for (auto &it : g_HooksGamerules)
 	{
-		if (g_HooksGamerules[i].sCallbackInfo.pOwner == (void *)pContext && strcmp(propName, g_HooksGamerules[i].pVar->GetName()) == 0)
+		if (it.sCallbackInfo.pOwner == (void *)pContext &&
+			strcmp(propName, it.pVar->GetName()) == 0) {
 			return 1;
+		}
 	}
 	return 0;
 }
@@ -534,7 +583,7 @@ static cell_t Native_HookArrayPropGamerules(IPluginContext * pContext, const cel
 
 	PropType propType = static_cast<PropType>(params[3]);
 
-	if (!IsPropValid(pProp, propType))
+	if (!IsPropValid(pProp, propType)) {
 		switch (propType)
 		{
 			case PropType::Prop_Int: 
@@ -548,6 +597,7 @@ static cell_t Native_HookArrayPropGamerules(IPluginContext * pContext, const cel
 			default:
 				return pContext->ThrowNativeError("Unsupported prop type %d", propType);
 		}
+	}
 	
 	SendPropHookGamerules hook;
 	hook.sCallbackInfo.pCallback = (void *)pContext->GetFunctionById(params[4]);
@@ -555,11 +605,11 @@ static cell_t Native_HookArrayPropGamerules(IPluginContext * pContext, const cel
 	hook.sCallbackInfo.pOwner = (void *)pContext;
 	hook.Element = element;
 	bool bHookedAlready = false;
-	for (int i = 0; i < g_HooksGamerules.Count(); i++)
+	for (auto &it : g_HooksGamerules)
 	{
-		if (g_HooksGamerules[i].pVar == pProp)
+		if (it.pVar == pProp)
 		{
-			hook.pRealProxy = g_HooksGamerules[i].pRealProxy;
+			hook.pRealProxy = it.pRealProxy;
 			bHookedAlready = true;
 			break;
 		}
@@ -571,11 +621,11 @@ static cell_t Native_HookArrayPropGamerules(IPluginContext * pContext, const cel
 	
 	if (bHookedAlready)
 	{
-		if (g_SendProxyManager.AddHookToListGamerules(hook))
+		if (g_SendProxyManager.AddHookToListGamerules(std::move(hook)))
 			return 1;
 		return 0;
 	}
-	if (g_SendProxyManager.AddHookToListGamerules(hook))
+	if (g_SendProxyManager.AddHookToListGamerules(std::move(hook)))
 	{
 		pProp->SetProxyFn(GlobalProxy);
 		return 1;
@@ -590,13 +640,23 @@ static cell_t Native_UnhookArrayPropGamerules(IPluginContext * pContext, const c
 	int iElement = params[2];
 	PropType iPropType = static_cast<PropType>(params[3]);
 	IPluginFunction * pFunction = pContext->GetFunctionById(params[4]);
-	for (int i = 0; i < g_Hooks.Count(); i++)
+	auto it = g_HooksGamerules.begin();
+	while(it != g_HooksGamerules.end())
 	{
-		if (g_HooksGamerules[i].Element == iElement && g_HooksGamerules[i].sCallbackInfo.iCallbackType == CallBackType::Callback_PluginFunction && g_HooksGamerules[i].propType == iPropType && g_HooksGamerules[i].sCallbackInfo.pCallback == (void *)pFunction && !strcmp(g_HooksGamerules[i].pVar->GetName(), propName))
+		auto &hook = *it;
+		
+		if (hook.Element == iElement &&
+			hook.sCallbackInfo.iCallbackType == CallBackType::Callback_PluginFunction &&
+			hook.propType == iPropType &&
+			hook.sCallbackInfo.pCallback == (void *)pFunction &&
+			!strcmp(hook.pVar->GetName(), propName))
 		{
-			g_SendProxyManager.UnhookProxyGamerules(i);
+			g_SendProxyManager.UnhookProxyGamerules(hook);
+			g_HooksGamerules.erase(it);
 			return 1;
 		}
+		
+		++it;
 	}
 	return 0;
 }
@@ -608,10 +668,14 @@ static cell_t Native_IsHookedArray(IPluginContext * pContext, const cell_t * par
 	pContext->LocalToString(params[2], &propName);
 	int iElement = params[3];
 
-	for (int i = 0; i < g_Hooks.Count(); i++)
+	for (auto &it : g_Hooks)
 	{
-		if (g_Hooks[i].sCallbackInfo.pOwner == (void *)pContext && g_Hooks[i].objectID == objectID && g_Hooks[i].Element == iElement && strcmp(propName, g_Hooks[i].pVar->GetName()) == 0)
+		if (it.sCallbackInfo.pOwner == (void *)pContext &&
+			it.objectID == objectID &&
+			it.Element == iElement &&
+			strcmp(propName, it.pVar->GetName()) == 0) {
 			return 1;
+		}
 	}
 	return 0;
 }
@@ -622,10 +686,13 @@ static cell_t Native_IsHookedArrayGameRules(IPluginContext * pContext, const cel
 	pContext->LocalToString(params[1], &propName);
 	int iElement = params[2];
 
-	for (int i = 0; i < g_HooksGamerules.Count(); i++)
+	for (auto &it : g_HooksGamerules)
 	{
-		if (g_HooksGamerules[i].sCallbackInfo.pOwner == (void *)pContext && g_HooksGamerules[i].Element == iElement && strcmp(propName, g_HooksGamerules[i].pVar->GetName()) == 0)
+		if (it.sCallbackInfo.pOwner == (void *)pContext &&
+			it.Element == iElement &&
+			strcmp(propName, it.pVar->GetName()) == 0) {
 			return 1;
+		}
 	}
 	return 0;
 }
@@ -663,7 +730,7 @@ static cell_t Native_HookPropChangeArray(IPluginContext * pContext, const cell_t
 
 	PropType propType = static_cast<PropType>(params[4]);
 
-	if (!IsPropValid(pProp, propType))
+	if (!IsPropValid(pProp, propType)) {
 		switch (propType)
 		{
 		case PropType::Prop_Int:
@@ -677,6 +744,7 @@ static cell_t Native_HookPropChangeArray(IPluginContext * pContext, const cell_t
 		default:
 			return pContext->ThrowNativeError("Unsupported prop type %d", propType);
 		}
+	}
 	
 	PropChangeHook hook;
 	hook.objectID = entity;
@@ -686,7 +754,7 @@ static cell_t Native_HookPropChangeArray(IPluginContext * pContext, const cell_t
 	sCallInfo.iCallbackType = CallBackType::Callback_PluginFunction;
 	sCallInfo.pCallback = (void *)pContext->GetFunctionById(params[5]);
 	sCallInfo.pOwner = (void *)pContext;
-	if (!g_SendProxyManager.AddChangeHookToList(hook, &sCallInfo))
+	if (!g_SendProxyManager.AddChangeHookToList(std::move(hook), std::move(sCallInfo)))
 		return pContext->ThrowNativeError("Entity %d isn't valid", entity);
 	return 1;
 }
@@ -720,17 +788,25 @@ static cell_t Native_UnhookPropChangeArray(IPluginContext * pContext, const cell
 	
 	IPluginFunction * callback = pContext->GetFunctionById(params[4]);
 
-	for (int i = 0; i < g_ChangeHooks.Count(); i++)
+	auto it = g_ChangeHooks.begin();
+	while(it != g_ChangeHooks.end())
 	{
-		if (g_ChangeHooks[i].objectID == entity && g_ChangeHooks[i].pVar == info.prop)
+		auto &hook = *it;
+		
+		if (hook.objectID == entity &&
+			hook.pVar == info.prop)
 		{
 			CallBackInfo sInfo;
 			sInfo.pCallback = callback;
 			sInfo.pOwner = (void *)pContext;
 			sInfo.iCallbackType = CallBackType::Callback_PluginFunction;
-			g_SendProxyManager.UnhookChange(i, &sInfo);
+			if(g_SendProxyManager.UnhookChange(hook, sInfo)) {
+				g_ChangeHooks.erase(it);
+			}
 			break;
 		}
+		
+		++it;
 	}
 	return 1;
 }
@@ -759,7 +835,7 @@ static cell_t Native_HookPropChangeArrayGameRules(IPluginContext * pContext, con
 		return pContext->ThrowNativeError("Could not find element %d in %s", element, info.prop->GetName());
 	
 	PropType propType = static_cast<PropType>(params[3]);
-	if (!IsPropValid(pProp, propType))
+	if (!IsPropValid(pProp, propType)) {
 		switch (propType)
 		{
 		case PropType::Prop_Int:
@@ -773,6 +849,7 @@ static cell_t Native_HookPropChangeArrayGameRules(IPluginContext * pContext, con
 		default:
 			return pContext->ThrowNativeError("Unsupported prop type %d", propType);
 		}
+	}
 
 	PropChangeHookGamerules hook;
 	hook.Offset = info.actual_offset + pProp->GetOffset();
@@ -781,7 +858,7 @@ static cell_t Native_HookPropChangeArrayGameRules(IPluginContext * pContext, con
 	sCallInfo.iCallbackType = CallBackType::Callback_PluginFunction;
 	sCallInfo.pCallback = (void *)pContext->GetFunctionById(params[4]);
 	sCallInfo.pOwner = (void *)pContext;
-	if (!g_SendProxyManager.AddChangeHookToListGamerules(hook, &sCallInfo))
+	if (!g_SendProxyManager.AddChangeHookToListGamerules(std::move(hook), std::move(sCallInfo)))
 		return pContext->ThrowNativeError("Prop type %d isn't valid", pProp->GetType()); //should never happen
 	return 1;
 }
@@ -809,17 +886,24 @@ static cell_t Native_UnhookPropChangeArrayGameRules(IPluginContext * pContext, c
 	
 	IPluginFunction * callback = pContext->GetFunctionById(params[3]);
 
-	for (int i = 0; i < g_ChangeHooksGamerules.Count(); i++)
+	auto it = g_ChangeHooksGamerules.begin();
+	while(it != g_ChangeHooksGamerules.end())
 	{
-		if (g_ChangeHooksGamerules[i].pVar == info.prop)
+		auto &hook = *it;
+		
+		if (hook.pVar == info.prop)
 		{
 			CallBackInfo sInfo;
 			sInfo.pCallback = callback;
 			sInfo.pOwner = (void *)pContext;
 			sInfo.iCallbackType = CallBackType::Callback_PluginFunction;
-			g_SendProxyManager.UnhookChangeGamerules(i, &sInfo);
+			if(g_SendProxyManager.UnhookChangeGamerules(hook, sInfo)) {
+				g_ChangeHooksGamerules.erase(it);
+			}
 			break;
 		}
+		
+		++it;
 	}
 	return 1;
 }
@@ -830,18 +914,18 @@ static cell_t Native_IsPropChangeHooked(IPluginContext * pContext, const cell_t 
 	char * propName;
 	pContext->LocalToString(params[2], &propName);
 
-	for (int i = 0; i < g_ChangeHooks.Count(); i++)
+	for (auto &it : g_ChangeHooks)
 	{
-		if (g_ChangeHooks[i].objectID == objectID && strcmp(propName, g_ChangeHooks[i].pVar->GetName()) == 0)
+		if (it.objectID == objectID &&
+			strcmp(propName, it.pVar->GetName()) == 0)
 		{
-			auto pCallbacks = g_ChangeHooks[i].vCallbacksInfo;
-			if (pCallbacks->Count())
-			{
-				for (int j = 0; j < pCallbacks->Count(); j++)
-					if ((*pCallbacks)[j].iCallbackType == CallBackType::Callback_PluginFunction && (*pCallbacks)[j].pOwner == (void *)pContext)
-					{
-						return 1;
-					}
+			auto &pCallbacks = it.vCallbacksInfo;
+			for (auto &it2 : pCallbacks) {
+				if (it2.iCallbackType == CallBackType::Callback_PluginFunction &&
+					it2.pOwner == (void *)pContext)
+				{
+					return 1;
+				}
 			}
 			break;
 		}
@@ -854,18 +938,17 @@ static cell_t Native_IsPropChangeHookedGameRules(IPluginContext * pContext, cons
 	char * propName;
 	pContext->LocalToString(params[1], &propName);
 
-	for (int i = 0; i < g_ChangeHooksGamerules.Count(); i++)
+	for (auto &it : g_ChangeHooksGamerules)
 	{
-		if (strcmp(propName, g_ChangeHooksGamerules[i].pVar->GetName()) == 0)
+		if (strcmp(propName, it.pVar->GetName()) == 0)
 		{
-			auto pCallbacks = g_ChangeHooksGamerules[i].vCallbacksInfo;
-			if (pCallbacks->Count())
-			{
-				for (int j = 0; j < pCallbacks->Count(); j++)
-					if ((*pCallbacks)[j].iCallbackType == CallBackType::Callback_PluginFunction && (*pCallbacks)[j].pOwner == (void *)pContext)
-					{
-						return 1;
-					}
+			auto &pCallbacks = it.vCallbacksInfo;
+			for (auto &it2 : pCallbacks) {
+				if (it2.iCallbackType == CallBackType::Callback_PluginFunction &&
+					it2.pOwner == (void *)pContext)
+				{
+					return 1;
+				}
 			}
 			break;
 		}
@@ -880,18 +963,19 @@ static cell_t Native_IsPropChangeArrayHooked(IPluginContext * pContext, const ce
 	pContext->LocalToString(params[2], &propName);
 	int element = params[3];
 
-	for (int i = 0; i < g_ChangeHooks.Count(); i++)
+	for (auto &it : g_ChangeHooks)
 	{
-		if (g_ChangeHooks[i].Element == element && g_ChangeHooks[i].objectID == objectID && strcmp(propName, g_ChangeHooks[i].pVar->GetName()) == 0)
+		if (it.Element == element &&
+			it.objectID == objectID &&
+			strcmp(propName, it.pVar->GetName()) == 0)
 		{
-			auto pCallbacks = g_ChangeHooks[i].vCallbacksInfo;
-			if (pCallbacks->Count())
-			{
-				for (int j = 0; j < pCallbacks->Count(); j++)
-					if ((*pCallbacks)[j].iCallbackType == CallBackType::Callback_PluginFunction && (*pCallbacks)[j].pOwner == (void *)pContext)
-					{
-						return 1;
-					}
+			auto &pCallbacks = it.vCallbacksInfo;
+			for (auto &it2 : pCallbacks) {
+				if (it2.iCallbackType == CallBackType::Callback_PluginFunction &&
+					it2.pOwner == (void *)pContext)
+				{
+					return 1;
+				}
 			}
 			break;
 		}
@@ -905,18 +989,18 @@ static cell_t Native_IsPropChangeArrayHookedGameRules(IPluginContext * pContext,
 	pContext->LocalToString(params[1], &propName);
 	int element = params[2];
 
-	for (int i = 0; i < g_ChangeHooksGamerules.Count(); i++)
+	for (auto &it : g_ChangeHooksGamerules)
 	{
-		if (g_ChangeHooksGamerules[i].Element == element && strcmp(propName, g_ChangeHooksGamerules[i].pVar->GetName()) == 0)
+		if (it.Element == element &&
+			strcmp(propName, it.pVar->GetName()) == 0)
 		{
-			auto pCallbacks = g_ChangeHooksGamerules[i].vCallbacksInfo;
-			if (pCallbacks->Count())
-			{
-				for (int j = 0; j < pCallbacks->Count(); j++)
-					if ((*pCallbacks)[j].iCallbackType == CallBackType::Callback_PluginFunction && (*pCallbacks)[j].pOwner == (void *)pContext)
-					{
-						return 1;
-					}
+			auto &pCallbacks = it.vCallbacksInfo;
+			for (auto &it2 : pCallbacks) {
+				if (it2.iCallbackType == CallBackType::Callback_PluginFunction &&
+					it2.pOwner == (void *)pContext)
+				{
+					return 1;
+				}
 			}
 			break;
 		}

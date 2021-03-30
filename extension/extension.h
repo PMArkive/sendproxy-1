@@ -75,9 +75,12 @@ struct ListenerCallbackInfo
 
 struct CallBackInfo
 {
-	CallBackInfo() { memset(this, 0, sizeof(CallBackInfo)); }
-	CallBackInfo(const CallBackInfo & rObj) { memcpy(this, &rObj, sizeof(CallBackInfo)); }
-	const CallBackInfo & operator=(const CallBackInfo & rObj) { return *(new CallBackInfo(rObj)); }
+	CallBackInfo() = default;
+	CallBackInfo(const CallBackInfo & rObj) = default;
+	CallBackInfo(CallBackInfo && rObj) = default;
+	CallBackInfo & operator=(const CallBackInfo & rObj) = default;
+	CallBackInfo & operator=(CallBackInfo && rObj) = default;
+	~CallBackInfo() = default;
 	void *									pOwner; //Pointer to plugin context or IExtension *
 	void *									pCallback;
 	CallBackType							iCallbackType;
@@ -85,14 +88,12 @@ struct CallBackInfo
 
 struct SendPropHook
 {
-	SendPropHook() { vListeners = new CUtlVector<ListenerCallbackInfo>(); }
-	SendPropHook(const SendPropHook & rObj)
-	{
-		memcpy(this, &rObj, sizeof(SendPropHook));
-		vListeners = new CUtlVector<ListenerCallbackInfo>();
-		*vListeners = *rObj.vListeners;
-	}
-	~SendPropHook() { delete vListeners; }
+	SendPropHook() = default;
+	SendPropHook(const SendPropHook & rObj) = default;
+	SendPropHook(SendPropHook && rObj) = default;
+	SendPropHook &operator=(SendPropHook &&) = default;
+	SendPropHook &operator=(const SendPropHook &) = default;
+	~SendPropHook() = default;
 	CallBackInfo							sCallbackInfo;
 	SendProp *								pVar;
 	edict_t *								pEnt;
@@ -101,44 +102,72 @@ struct SendPropHook
 	PropType								propType;
 	int										Offset;
 	int										Element{0};
-	CUtlVector<ListenerCallbackInfo> *		vListeners;
+	std::vector<ListenerCallbackInfo>		vListeners;
 	bool per_client = false;
 };
 
 struct SendPropHookGamerules
 {
-	SendPropHookGamerules() { vListeners = new CUtlVector<ListenerCallbackInfo>(); }
-	SendPropHookGamerules(const SendPropHookGamerules & rObj)
-	{
-		memcpy(this, &rObj, sizeof(SendPropHookGamerules));
-		vListeners = new CUtlVector<ListenerCallbackInfo>();
-		*vListeners = *rObj.vListeners;
-	}
-	~SendPropHookGamerules() { delete vListeners; }
+	SendPropHookGamerules() = default;
+	SendPropHookGamerules(const SendPropHookGamerules & rObj) = default;
+	SendPropHookGamerules(SendPropHookGamerules && rObj) = default;
+	SendPropHookGamerules &operator=(SendPropHookGamerules &&) = default;
+	SendPropHookGamerules &operator=(const SendPropHookGamerules &) = default;
+	~SendPropHookGamerules() = default;
 	CallBackInfo							sCallbackInfo;
 	SendProp *								pVar;
 	SendVarProxyFn							pRealProxy;
 	PropType								propType;
 	int										Element{0};
-	CUtlVector<ListenerCallbackInfo> *		vListeners;
+	std::vector<ListenerCallbackInfo>		vListeners;
 	bool per_client = false;
+};
+
+struct dumbvec_t
+{
+	dumbvec_t() = default;
+	dumbvec_t(const dumbvec_t &) = default;
+	dumbvec_t(dumbvec_t &&) = default;
+	dumbvec_t &operator=(const dumbvec_t &) = default;
+	dumbvec_t &operator=(dumbvec_t &&) = default;
+	
+	float &operator[](int i) { return value[i]; }
+	const float &operator[](int i) const { return value[i]; }
+	dumbvec_t &operator=(const Vector &vec) {
+		value[0] = vec.x;
+		value[1] = vec.y;
+		value[2] = vec.z;
+		return *this;
+	}
+	
+	bool operator==(const Vector &vec) {
+		return value[0] == vec.x &&
+				value[1] == vec.y &&
+				value[2] == vec.z;
+	}
+	
+	bool operator!=(const Vector &vec) {
+		return value[0] != vec.x &&
+				value[1] != vec.y &&
+				value[2] != vec.z;
+	}
+	
+	float value[3];
 };
 
 struct PropChangeHook
 {
-	PropChangeHook() { vCallbacksInfo = new CUtlVector<CallBackInfo>(); }
-	PropChangeHook(const PropChangeHook & rObj)
-	{
-		memcpy(this, &rObj, sizeof(PropChangeHook));
-		vCallbacksInfo = new CUtlVector<CallBackInfo>();
-		*vCallbacksInfo = *rObj.vCallbacksInfo;
-	}
-	~PropChangeHook() { delete vCallbacksInfo; }
+	PropChangeHook() = default;
+	PropChangeHook(const PropChangeHook & rObj) = default;
+	PropChangeHook(PropChangeHook && rObj) = default;
+	PropChangeHook &operator=(PropChangeHook &&) = default;
+	PropChangeHook &operator=(const PropChangeHook &) = default;
+	~PropChangeHook() = default;
 	union //unfortunately we MUST use union instead of std::variant cuz we should prevent libstdc++ linking in linux =|
 	{
-		int									iLastValue;
+		int									iLastValue{0};
 		float								flLastValue;
-		Vector								vecLastValue;
+		dumbvec_t							vecLastValue;
 		char								cLastValue[4096];
 	};
 	SendProp *								pVar;
@@ -146,32 +175,35 @@ struct PropChangeHook
 	unsigned int							Offset;
 	int										objectID;
 	int										Element{0};
-	CUtlVector<CallBackInfo> *				vCallbacksInfo;
+	std::vector<CallBackInfo>				vCallbacksInfo;
 };
 
 struct PropChangeHookGamerules
 {
-	PropChangeHookGamerules() { vCallbacksInfo = new CUtlVector<CallBackInfo>(); }
-	PropChangeHookGamerules(const PropChangeHookGamerules & rObj)
-	{
-		memcpy(this, &rObj, sizeof(PropChangeHookGamerules));
-		vCallbacksInfo = new CUtlVector<CallBackInfo>();
-		*vCallbacksInfo = *rObj.vCallbacksInfo;
-	}
-	~PropChangeHookGamerules() { delete vCallbacksInfo; }
+	PropChangeHookGamerules() = default;
+	PropChangeHookGamerules(const PropChangeHookGamerules & rObj) = default;
+	PropChangeHookGamerules(PropChangeHookGamerules && rObj) = default;
+	PropChangeHookGamerules &operator=(PropChangeHookGamerules &&) = default;
+	PropChangeHookGamerules &operator=(const PropChangeHookGamerules &) = default;
+	~PropChangeHookGamerules() = default;
 	union //unfortunately we MUST use union instead of std::variant cuz we should prevent libstdc++ linking in linux =|
 	{
-		int									iLastValue;
+		int									iLastValue{0};
 		float								flLastValue;
-		Vector								vecLastValue;
+		dumbvec_t							vecLastValue;
 		char								cLastValue[4096];
 	};
 	SendProp *								pVar;
 	PropType								propType;
 	unsigned int							Offset;
 	int										Element{0};
-	CUtlVector<CallBackInfo> *				vCallbacksInfo;
+	std::vector<CallBackInfo>				vCallbacksInfo;
 };
+
+extern std::vector<SendPropHook> g_Hooks;
+extern std::vector<SendPropHookGamerules> g_HooksGamerules;
+extern std::vector<PropChangeHook> g_ChangeHooks;
+extern std::vector<PropChangeHookGamerules> g_ChangeHooksGamerules;
  
 class SendProxyManager :
 	public SDKExtension,
@@ -189,18 +221,18 @@ public: //sm
 public: //other
 	virtual void OnPluginUnloaded(IPlugin * plugin);
 	//returns true upon success
-	bool AddHookToList(SendPropHook hook);
-	bool AddHookToListGamerules(SendPropHookGamerules hook);
+	bool AddHookToList(SendPropHook &&hook);
+	bool AddHookToListGamerules(SendPropHookGamerules &&hook);
 
 	//returns false if prop type not supported or entity is invalid
-	bool AddChangeHookToList(PropChangeHook sHook, CallBackInfo * pInfo);
-	bool AddChangeHookToListGamerules(PropChangeHookGamerules sHook, CallBackInfo * pInfo);
+	bool AddChangeHookToList(PropChangeHook &&sHook, CallBackInfo &&pInfo);
+	bool AddChangeHookToListGamerules(PropChangeHookGamerules &&sHook, CallBackInfo &&pInfo);
 
-	void UnhookProxy(int i);
-	void UnhookProxyGamerules(int i);
+	bool UnhookProxy(const SendPropHook &hook);
+	bool UnhookProxyGamerules(const SendPropHookGamerules &hook);
 
-	void UnhookChange(int i, CallBackInfo * pInfo);
-	void UnhookChangeGamerules(int i, CallBackInfo * pInfo);
+	bool UnhookChange(PropChangeHook &hook, const CallBackInfo &pInfo);
+	bool UnhookChangeGamerules(PropChangeHookGamerules &hook, const CallBackInfo &pInfo);
 	virtual int GetClientCount() const;
 public: // ISMEntityListener
 	virtual void OnEntityDestroyed(CBaseEntity * pEntity);
@@ -214,10 +246,6 @@ public:
 
 extern SendProxyManager g_SendProxyManager;
 extern IServerGameEnts * gameents;
-extern CUtlVector<SendPropHook> g_Hooks;
-extern CUtlVector<SendPropHookGamerules> g_HooksGamerules;
-extern CUtlVector<PropChangeHook> g_ChangeHooks;
-extern CUtlVector<PropChangeHookGamerules> g_ChangeHooksGamerules;
 extern const char * g_szGameRulesProxy;
 constexpr int g_iEdictCount = 2048; //default value, we do not need to get it manually cuz it is constant
 extern ISDKTools * g_pSDKTools;
