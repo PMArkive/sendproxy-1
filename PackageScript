@@ -28,13 +28,13 @@ def CopyFiles(src, dest, files):
     builder.AddCopy(source_path, dest_entry)
 
 # Include files 
-CopyFiles('include', 'addons/sourcemod/scripting/include',
-  [ '../../addons/sourcemod/scripting/include/sendproxy.inc', ]
+CopyFiles('sourcemod/scripting/include', 'addons/sourcemod/scripting/include',
+  [ 'sendproxy.inc', ]
 )
 
 # GameData files
-CopyFiles('gamedata', 'addons/sourcemod/gamedata',
-  [ '../../addons/sourcemod/gamedata/sendproxy.txt',]
+CopyFiles('sourcemod/gamedata', 'addons/sourcemod/gamedata',
+  [ 'sendproxy.txt',]
 )
 
 # Config Files
