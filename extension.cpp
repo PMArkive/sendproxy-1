@@ -57,33 +57,50 @@
 	CDetour *name##_Detour = nullptr;
 
 #define CREATE_DETOUR(name, signname, var) \
-	name##_Detour = DETOUR_CREATE_MEMBER(name, signname); \
-	if (name##_Detour != NULL) \
+	if (name##_Detour == NULL) \
 	{ \
+		name##_Detour = DETOUR_CREATE_MEMBER(name, signname); \
+		if(name##_Detour) { \
+			name##_Detour->EnableDetour(); \
+			var = true; \
+		} else { \
+			g_pSM->LogError(myself, "Failed to create " signname " detour, check error log.\n"); \
+			var = false; \
+		} \
+	} else { \
 		name##_Detour->EnableDetour(); \
 		var = true; \
-	} else { \
-		g_pSM->LogError(myself, "Failed to create " signname " detour, check error log.\n"); \
-		var = false; \
 	}
 
 #define CREATE_DETOUR_STATIC(name, signname, var) \
-	name##_Detour = DETOUR_CREATE_STATIC(name, signname); \
-	if (name##_Detour != NULL) \
+	if (name##_Detour == NULL) \
 	{ \
+		name##_Detour = DETOUR_CREATE_STATIC(name, signname); \
+		if(name##_Detour) { \
+			name##_Detour->EnableDetour(); \
+			var = true; \
+		} else { \
+			g_pSM->LogError(myself, "Failed to create " signname " detour, check error log.\n"); \
+			var = false; \
+		} \
+	} else { \
 		name##_Detour->EnableDetour(); \
 		var = true; \
-	} else { \
-		g_pSM->LogError(myself, "Failed to create " signname " detour, check error log.\n"); \
-		var = false; \
 	}
 
+#define DISABLE_DETOUR(name) \
+	if (name##_Detour != nullptr) \
+	{ \
+		name##_Detour->DisableDetour(); \
+		name##_Detour = nullptr; \
+	}
+	
 #define DESTROY_DETOUR(name) \
 	if (name##_Detour != nullptr) \
-{ \
-	name##_Detour->Destroy(); \
-	name##_Detour = nullptr; \
-}
+	{ \
+		name##_Detour->Destroy(); \
+		name##_Detour = nullptr; \
+	}
 
 SH_DECL_HOOK1_void(IServerGameClients, ClientDisconnect, SH_NOATTRIB, false, edict_t *);
 SH_DECL_HOOK1_void(IServerGameDLL, GameFrame, SH_NOATTRIB, false, bool);
@@ -643,9 +660,9 @@ void SendProxyManager::OnCoreMapEnd()
 	g_pGameRulesProxyEdict = nullptr;
 	
 	if(g_numPerClientHooks > 0) {
-		DESTROY_DETOUR(CGameServer_SendClientMessages);
-		DESTROY_DETOUR(CGameClient_ShouldSendMessages);
-		DESTROY_DETOUR(SV_ComputeClientPacks);
+		DISABLE_DETOUR(CGameServer_SendClientMessages);
+		DISABLE_DETOUR(CGameClient_ShouldSendMessages);
+		DISABLE_DETOUR(SV_ComputeClientPacks);
 		g_iCurrentClientIndexInLoop = -1;
 		g_bSVComputePacksDone = true;
 	}
@@ -930,9 +947,9 @@ bool SendProxyManager::UnhookProxy(const SendPropHook &hook)
 {
 	if(hook.per_client) {
 		if(--g_numPerClientHooks == 0) {
-			DESTROY_DETOUR(CGameServer_SendClientMessages);
-			DESTROY_DETOUR(CGameClient_ShouldSendMessages);
-			DESTROY_DETOUR(SV_ComputeClientPacks);
+			DISABLE_DETOUR(CGameServer_SendClientMessages);
+			DISABLE_DETOUR(CGameClient_ShouldSendMessages);
+			DISABLE_DETOUR(SV_ComputeClientPacks);
 			g_iCurrentClientIndexInLoop = -1;
 			g_bSVComputePacksDone = true;
 		}
@@ -968,9 +985,9 @@ bool SendProxyManager::UnhookProxyGamerules(const SendPropHookGamerules &hook)
 {
 	if(hook.per_client) {
 		if(--g_numPerClientHooks == 0) {
-			DESTROY_DETOUR(CGameServer_SendClientMessages);
-			DESTROY_DETOUR(CGameClient_ShouldSendMessages);
-			DESTROY_DETOUR(SV_ComputeClientPacks);
+			DISABLE_DETOUR(CGameServer_SendClientMessages);
+			DISABLE_DETOUR(CGameClient_ShouldSendMessages);
+			DISABLE_DETOUR(SV_ComputeClientPacks);
 			g_iCurrentClientIndexInLoop = -1;
 			g_bSVComputePacksDone = true;
 		}
