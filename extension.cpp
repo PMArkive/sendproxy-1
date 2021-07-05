@@ -92,7 +92,6 @@
 	if (name##_Detour != nullptr) \
 	{ \
 		name##_Detour->DisableDetour(); \
-		name##_Detour = nullptr; \
 	}
 	
 #define DESTROY_DETOUR(name) \
