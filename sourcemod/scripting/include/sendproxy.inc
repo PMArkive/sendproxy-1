@@ -56,7 +56,7 @@ typeset GameRulesPropChangedCallback
 //Returns true upon success, false upon failure
 native bool SendProxy_Hook(const int iEntity, const char[] cPropName, const SendPropType stType, const SendProxyCallback pCallback, bool per_client = false);
 native bool SendProxy_HookGameRules(const char[] cPropName, const SendPropType stType, const SendProxyCallbackGamerules pCallback, bool per_client = false);
-native bool SendProxy_HookArrayProp(const int iEntity, const char[] cPropName, const int iElement, const SendPropType stType, const SendProxyCallback pCallback);
+native bool SendProxy_HookArrayProp(const int iEntity, const char[] cPropName, const int iElement, const SendPropType stType, const SendProxyCallback pCallback, bool per_client = false);
 native bool SendProxy_UnhookArrayProp(const int iEntity, const char[] cPropName, const int iElement, const SendPropType stType, const SendProxyCallback pCallback);
 native bool SendProxy_Unhook(const int iEntity, const char[] cPropName, const SendProxyCallback pCallback);
 native bool SendProxy_UnhookGameRules(const char[] cPropName, const SendProxyCallbackGamerules pCallback);

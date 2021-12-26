@@ -427,6 +427,7 @@ static cell_t Native_HookArrayProp(IPluginContext * pContext, const cell_t * par
 		hook.pRealProxy = pProp->GetProxyFn();
 	hook.propType = propType;
 	hook.pVar = pProp;
+	hook.per_client = params[6];
 	
 	if (bHookedAlready)
 	{
