@@ -6,6 +6,7 @@
 		{
 			"game"	"tf"
 			"game"	"left4dead2"
+			"game"	"cstrike"
 		}
 
 		"Signatures"
@@ -53,6 +54,27 @@
 		}
 	}
 	"tf"
+	{
+		"Signatures"
+		{
+			"CGameClient::ShouldSendMessages"
+			{
+				"library"			"engine"
+				"windows"			"\x55\x8B\xEC\x51\x56\x8B\xF1\x80\xBE\x94\x00\x00\x00\x00"
+			}
+			"CGameServer::SendClientMessages"
+			{
+				"library"			"engine"
+				"windows"			"\x55\x8B\xEC\x81\xEC\x30\x04\x00\x00\x53\x56\x57\x33\xDB"
+			}
+			"SV_ComputeClientPacks"
+			{
+				"library"			"engine"
+				"windows"			"\x55\x8B\xEC\x83\xEC\x38\x8B\x0D\x2A\x2A\x2A\x2A\x53\x33\xDB"
+			}
+		}
+	}
+	"cstrike"
 	{
 		"Signatures"
 		{
