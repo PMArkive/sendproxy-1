@@ -151,8 +151,9 @@ class ExtensionConfig(object):
         '-m32',
       ]
       cxx.cxxflags += [
-        '-std=c++14',
+        '-std=c++17',
         '-fpermissive',
+        '-Wno-register',
       ]
 
       have_gcc = cxx.vendor == 'gcc'

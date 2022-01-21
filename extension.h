@@ -210,6 +210,9 @@ class SendProxyManager :
 	public SDKExtension,
 	public IPluginsListener,
 	public ISMEntityListener
+#ifdef SENDPROXY_PERCLIENT_METHOD_V2
+	,public IClientListener
+#endif
 {
 public: //sm
 	virtual bool SDK_OnLoad(char * error, size_t maxlength, bool late);
@@ -234,9 +237,16 @@ public: //other
 
 	bool UnhookChange(PropChangeHook &hook, const CallBackInfo &pInfo);
 	bool UnhookChangeGamerules(PropChangeHookGamerules &hook, const CallBackInfo &pInfo);
+#ifndef SENDPROXY_PERCLIENT_METHOD_V2
 	virtual int GetClientCount() const;
+#endif
 public: // ISMEntityListener
 	virtual void OnEntityDestroyed(CBaseEntity * pEntity);
+
+#ifdef SENDPROXY_PERCLIENT_METHOD_V2
+	virtual void OnClientPutInServer(int client);
+	virtual void OnClientDisconnecting(int client);
+#endif
 public:
 #if defined SMEXT_CONF_METAMOD
 	virtual bool SDK_OnMetamodLoad(ISmmAPI * ismm, char * error, size_t maxlen, bool late);

@@ -29,6 +29,10 @@
  * Version: $Id$
  */
 
+#ifdef SENDPROXY_PERCLIENT_METHOD_V2
+#include <algorithm>
+#endif
+
 #ifdef _WIN32
 #undef GetProp
 #ifdef _WIN64
@@ -52,6 +56,14 @@
 //path: hl2sdk-<your sdk here>/public/<include>.h, "../public/" included to prevent compile errors due wrong directory scanning by compiler on my computer, and I'm too lazy to find where I can change that =D
 #include <../public/iserver.h>
 #include <../public/iclient.h>
+
+#include <atomic>
+#ifdef SENDPROXY_PERCLIENT_METHOD_V2
+#include "changeframelist.h"
+#include "packed_entity.h"
+#include <irecipientfilter.h>
+#include <unordered_map>
+#endif
 
 #define DECL_DETOUR(name) \
 	CDetour *name##_Detour = nullptr;
@@ -103,23 +115,37 @@
 
 SH_DECL_HOOK1_void(IServerGameClients, ClientDisconnect, SH_NOATTRIB, false, edict_t *);
 SH_DECL_HOOK1_void(IServerGameDLL, GameFrame, SH_NOATTRIB, false, bool);
+#ifndef SENDPROXY_PERCLIENT_METHOD_V2
 SH_DECL_HOOK0(IServer, GetClientCount, const, false, int);
 
 DECL_DETOUR(CGameServer_SendClientMessages);
 DECL_DETOUR(CGameClient_ShouldSendMessages);
+#else
+SH_DECL_HOOK5_void(IVEngineServer, PlaybackTempEntity, SH_NOATTRIB, false, IRecipientFilter &, float, const void *, const SendTable *, int);
+
+DECL_DETOUR(SV_PackEntity);
+DECL_DETOUR(SendTable_Encode);
+DECL_DETOUR(SV_EnsureInstanceBaseline);
+DECL_DETOUR(SendTable_CalcDelta);
+DECL_DETOUR(CFrameSnapshotManager_CreatePackedEntity);
+DECL_DETOUR(SV_CreateBaseline);
+#endif
 DECL_DETOUR(SV_ComputeClientPacks);
 
 class CGameClient;
 class CFrameSnapshot;
 class CGlobalEntityList;
+class CFrameSnapshotManager;
 
+std::atomic_int32_t g_iCurrentClientIndexInLoop{-1};
+#ifndef SENDPROXY_PERCLIENT_METHOD_V2
 CGameClient * g_pCurrentGameClientPtr = nullptr;
-int g_iCurrentClientIndexInLoop = -1; //used for optimization
 bool g_bCurrentGameClientCallFwd = false;
 bool g_bCallingForNullClients = false;
 bool g_bFirstTimeCalled = true;
 bool g_bSVComputePacksDone = true;
 IServer * g_pIServer = nullptr;
+#endif
 
 SendProxyManager g_SendProxyManager;
 SendProxyManagerInterfaceImpl * g_pMyInterface = nullptr;
@@ -148,8 +174,10 @@ ConVar * sv_parallel_sendsnapshot = nullptr;
 
 edict_t * g_pGameRulesProxyEdict = nullptr;
 void * g_pGameRules = nullptr;
+#ifndef SENDPROXY_PERCLIENT_METHOD_V2
 bool g_bShouldChangeGameRulesState = false;
 bool g_bSendSnapshots = false;
+#endif
 
 size_t g_numPerClientHooks = 0;
 
@@ -163,6 +191,7 @@ const char * g_szGameRulesProxy;
 
 //detours
 
+#ifndef SENDPROXY_PERCLIENT_METHOD_V2
 /*Call stack:
 	...
 	1. CGameServer::SendClientMessages //function we hooking to send props individually for each client
@@ -336,6 +365,219 @@ DETOUR_DECL_MEMBER0(CGameClient_ShouldSendMessages, bool)
 #endif
 	return false;
 }
+#else
+struct packed_entity_data_t
+{
+	packed_entity_data_t(packed_entity_data_t &&) noexcept = default;
+	packed_entity_data_t &operator=(packed_entity_data_t &&) noexcept = default;
+
+	packed_entity_data_t() noexcept = default;
+	~packed_entity_data_t() noexcept {}
+
+	ALIGN4 char packedData[MAX_PACKEDENTITY_DATA] ALIGN4_POST {0};
+	bf_write writeBuf{"SV_PackEntity->writeBuf", packedData, sizeof(packedData)};
+
+	void clear() noexcept {
+		for(int i{0}; i < MAX_PACKEDENTITY_DATA; ++i) {
+			packedData[i] = 0;
+		}
+		writeBuf.Reset();
+	}
+
+private:
+	packed_entity_data_t(const packed_entity_data_t &) = delete;
+	packed_entity_data_t &operator=(const packed_entity_data_t &) = delete;
+};
+
+struct pack_entity_params_base_t
+{
+	const SendTable *sendtable = nullptr;
+	const void *object = nullptr;
+	int object_id = -1;
+	CUtlMemory<CSendProxyRecipients> *recipients = nullptr;
+	bool non_zero_only = false;
+
+	constexpr pack_entity_params_base_t() noexcept = default;
+	~pack_entity_params_base_t() noexcept {}
+
+	constexpr void clear() noexcept {
+		sendtable = nullptr;
+		object = nullptr;
+		object_id = -1;
+		recipients = nullptr;
+		non_zero_only = false;
+	}
+};
+
+struct pack_entity_params_t : pack_entity_params_base_t
+{
+	std::vector<packed_entity_data_t> entity_data{};
+	std::vector<PackedEntity *> packed{};
+
+	pack_entity_params_t() noexcept = default;
+	~pack_entity_params_t() noexcept {}
+
+	void set_client_count(int count) noexcept {
+		entity_data.resize(count-1);
+		packed.resize(count);
+	}
+
+	void clear() noexcept {
+		pack_entity_params_base_t::clear();
+		entity_data.clear();
+		packed.clear();
+	}
+};
+static thread_local pack_entity_params_t *current_packentity_params{nullptr};
+static std::atomic_bool disable_callbacks{false};
+static std::unordered_map<const SendTable *, std::size_t> perclient_sendtables;
+static std::vector<int> human_clients;
+static std::atomic_bool should_disable_callbacks{false};
+
+void PlaybackTempEntity(IRecipientFilter &filter, float delay, const void *pSender, const SendTable *pST, int classID)
+{
+	should_disable_callbacks = true;
+	SH_CALL(engine, &IVEngineServer::PlaybackTempEntity)(filter, delay, pSender, pST, classID);
+	should_disable_callbacks = false;
+	RETURN_META(MRES_SUPERCEDE);
+}
+
+DETOUR_DECL_STATIC6(SendTable_Encode, bool, const SendTable *, pTable, const void *, pStruct, bf_write *, pOut, int, objectID, CUtlMemory<CSendProxyRecipients> *, pRecipients, bool, bNonZeroOnly)
+{
+	if(//perclient_sendtables.find(pTable) == perclient_sendtables.cend() ||
+		human_clients.empty()) {
+		if(current_packentity_params != nullptr) {
+			delete current_packentity_params;
+			current_packentity_params = nullptr;
+		}
+	}
+
+	if(current_packentity_params == nullptr) {
+		if(should_disable_callbacks) {
+			disable_callbacks = true;
+		}
+		bool encoded{DETOUR_STATIC_CALL(SendTable_Encode)(pTable, pStruct, pOut, objectID, pRecipients, bNonZeroOnly)};
+		if(should_disable_callbacks) {
+			disable_callbacks = false;
+		}
+		return encoded;
+	}
+
+	current_packentity_params->sendtable = pTable;
+	current_packentity_params->object = pStruct;
+	current_packentity_params->recipients = pRecipients;
+	current_packentity_params->object_id = objectID;
+	current_packentity_params->non_zero_only = bNonZeroOnly;
+
+	{
+		g_iCurrentClientIndexInLoop = human_clients[0];
+		bool encoded{DETOUR_STATIC_CALL(SendTable_Encode)(pTable, pStruct, pOut, objectID, pRecipients, bNonZeroOnly)};
+		g_iCurrentClientIndexInLoop = -1;
+		if(!encoded) {
+			return false;
+		}
+	}
+
+	for(int i{1}; i < human_clients.size(); ++i) {
+		packed_entity_data_t &packedData{current_packentity_params->entity_data[i-1]};
+
+		g_iCurrentClientIndexInLoop = human_clients[i];
+		bool encoded{DETOUR_STATIC_CALL(SendTable_Encode)(pTable, pStruct, &packedData.writeBuf, objectID, pRecipients, bNonZeroOnly)};
+		g_iCurrentClientIndexInLoop = -1;
+		if(!encoded) {
+			return false;
+		}
+	}
+
+	return true;
+}
+
+static void Host_Error(const char *error, ...)
+{
+	va_list argptr;
+	char string[1024];
+
+	va_start(argptr, error);
+	Q_vsnprintf(string, sizeof(string), error, argptr);
+	va_end(argptr);
+
+	Error("Host_Error: %s\n", string);
+}
+
+DETOUR_DECL_STATIC0(SV_CreateBaseline, void)
+{
+	should_disable_callbacks = true;
+	DETOUR_STATIC_CALL(SV_CreateBaseline)();
+	should_disable_callbacks = false;
+}
+
+DETOUR_DECL_STATIC4(SV_EnsureInstanceBaseline, void, ServerClass *, pServerClass, int, iEdict, const void *, pData, int, nBytes)
+{
+	if(current_packentity_params == nullptr) {
+		DETOUR_STATIC_CALL(SV_EnsureInstanceBaseline)(pServerClass, iEdict, pData, nBytes);
+		return;
+	}
+
+	if(pServerClass->m_InstanceBaselineIndex == INVALID_STRING_INDEX) {
+		packed_entity_data_t packedData{};
+		disable_callbacks = true;
+		bool encoded{DETOUR_STATIC_CALL(SendTable_Encode)(current_packentity_params->sendtable, current_packentity_params->object, &packedData.writeBuf, current_packentity_params->object_id, current_packentity_params->recipients, current_packentity_params->non_zero_only)};
+		disable_callbacks = false;
+		if(!encoded) {
+			Host_Error("SV_EnsureInstanceBaseline: SendTable_Encode returned false (ent %d).\n", iEdict);
+			return;
+		}
+		DETOUR_STATIC_CALL(SV_EnsureInstanceBaseline)(pServerClass, iEdict, packedData.packedData, packedData.writeBuf.GetNumBytesWritten());
+	}
+}
+
+DETOUR_DECL_STATIC8(SendTable_CalcDelta, int, const SendTable *, pTable, const void *, pFromState, const int, nFromBits, const void * ,pToState, const int, nToBits, int *, pDeltaProps, int, nMaxDeltaProps, const int, objectID)
+{
+	if(current_packentity_params == nullptr) {
+		return DETOUR_STATIC_CALL(SendTable_CalcDelta)(pTable, pFromState, nFromBits, pToState, nToBits, pDeltaProps, nMaxDeltaProps, objectID);
+	}
+
+	int global_nChanges = 0;
+
+	int *client_deltaProps = new int[nMaxDeltaProps]{static_cast<unsigned int>(-1)};
+	int client_nChanges = 0;
+
+	{
+		client_nChanges = DETOUR_STATIC_CALL(SendTable_CalcDelta)(pTable, pFromState, nFromBits, pToState, nToBits, client_deltaProps, nMaxDeltaProps, objectID);
+
+		for(int j{0}; j < client_nChanges; ++j) {
+			pDeltaProps[global_nChanges++] = client_deltaProps[j];
+		}
+	}
+
+	for(int i{1}; i < human_clients.size(); ++i) {
+		packed_entity_data_t &packedData{current_packentity_params->entity_data[i-1]};
+
+		client_nChanges = DETOUR_STATIC_CALL(SendTable_CalcDelta)(pTable, pFromState, nFromBits, packedData.packedData, packedData.writeBuf.GetNumBytesWritten(), client_deltaProps, nMaxDeltaProps, objectID);
+
+		for(int j{0}; j < client_nChanges; ++j) {
+			pDeltaProps[global_nChanges++] = client_deltaProps[j];
+		}
+	}
+
+	delete[] client_deltaProps;
+
+	return global_nChanges;
+}
+
+DETOUR_DECL_MEMBER2(CFrameSnapshotManager_CreatePackedEntity, PackedEntity *, CFrameSnapshot *, pSnapshot, int, entity)
+{
+	if(current_packentity_params == nullptr) {
+		return DETOUR_MEMBER_CALL(CFrameSnapshotManager_CreatePackedEntity)(pSnapshot, entity);
+	}
+
+	for(int i{0}; i < human_clients.size(); ++i) {
+		current_packentity_params->packed[i] = DETOUR_MEMBER_CALL(CFrameSnapshotManager_CreatePackedEntity)(pSnapshot, entity);
+	}
+
+	return current_packentity_params->packed[0];
+}
+#endif
 
 #if defined __linux__
 void __attribute__((__cdecl__)) SV_ComputeClientPacks_ActualCall(int iClientCount, CGameClient ** pClients, CFrameSnapshot * pSnapShot);
@@ -352,13 +594,18 @@ DETOUR_DECL_STATIC3(SV_ComputeClientPacks, void, int, iClientCount, CGameClient 
 	__asm mov pClients, edx
 	__asm mov pSnapShot, ebx
 #endif
+#ifndef SENDPROXY_PERCLIENT_METHOD_V2
 	g_bSVComputePacksDone = false;
-	if (!iClientCount || !g_bSendSnapshots || pClients[0] != g_pCurrentGameClientPtr)
-		return SV_ComputeClientPacks_ActualCall(iClientCount, pClients, pSnapShot);
+	if (!iClientCount || !g_bSendSnapshots || pClients[0] != g_pCurrentGameClientPtr) {
+		SV_ComputeClientPacks_ActualCall(iClientCount, pClients, pSnapShot);
+		return;
+	}
 	IClient * pClient = (IClient *)((char *)pClients[0] + 4);
 	int iClient = pClient->GetPlayerSlot();
-	if (g_iCurrentClientIndexInLoop != iClient)
-		return SV_ComputeClientPacks_ActualCall(iClientCount, pClients, pSnapShot);
+	if (g_iCurrentClientIndexInLoop != iClient) {
+		SV_ComputeClientPacks_ActualCall(iClientCount, pClients, pSnapShot);
+		return;
+	}
 	//Also here we can change actual values for each client! But for what?
 	//Just mark all hooked edicts as changed to bypass check in SV_PackEntity!
 	for (auto pEdict : g_vHookedEdicts)
@@ -373,7 +620,51 @@ DETOUR_DECL_STATIC3(SV_ComputeClientPacks, void, int, iClientCount, CGameClient 
 	}
 	if (g_bCurrentGameClientCallFwd)
 		g_bSVComputePacksDone = true;
-	return SV_ComputeClientPacks_ActualCall(iClientCount, pClients, pSnapShot);
+	SV_ComputeClientPacks_ActualCall(iClientCount, pClients, pSnapShot);
+#else
+	if(current_packentity_params != nullptr) {
+		delete current_packentity_params;
+	}
+	current_packentity_params = new pack_entity_params_t{};
+	current_packentity_params->set_client_count(human_clients.size());
+	SV_ComputeClientPacks_ActualCall(iClientCount, pClients, pSnapShot);
+
+	if(current_packentity_params != nullptr) {
+		IChangeFrameList *pChangeFrame = nullptr;
+
+		unsigned char tempData[ sizeof( CSendProxyRecipients ) ];
+		CUtlMemory< CSendProxyRecipients > recip( (CSendProxyRecipients*)tempData, 1 );
+
+		ServerClass *pServerClass = nullptr;
+
+		{
+			PackedEntity *pPackedEntity{current_packentity_params->packed[0]};
+			if(pPackedEntity) {
+				recip.Element(0).SetOnly(human_clients[0]);
+				pPackedEntity->SetRecipients(recip);
+
+				pServerClass = pPackedEntity->m_pServerClass;
+				pChangeFrame = pPackedEntity->GetChangeFrameList();
+			}
+		}
+
+		for(int i{1}; i < human_clients.size(); ++i) {
+			packed_entity_data_t &packedData{current_packentity_params->entity_data[i-1]};
+
+			PackedEntity *pPackedEntity{current_packentity_params->packed[i]};
+			if(pPackedEntity) {
+				pPackedEntity->SetChangeFrameList(pChangeFrame);
+				pPackedEntity->SetServerAndClientClass(pServerClass, nullptr);
+				pPackedEntity->AllocAndCopyPadded(packedData.packedData, packedData.writeBuf.GetNumBytesWritten());
+				recip.Element(0).SetOnly(human_clients[i]);
+				pPackedEntity->SetRecipients(recip);
+			}
+		}
+
+		delete current_packentity_params;
+		current_packentity_params = nullptr;
+	}
+#endif
 }
 
 #if defined _WIN32 && SOURCE_ENGINE == SE_CSGO
@@ -428,6 +719,32 @@ void DoOnEntityDestroyed(int idx)
 		++it2;
 	}
 }
+
+#ifdef SENDPROXY_PERCLIENT_METHOD_V2
+void SendProxyManager::OnClientPutInServer(int client)
+{
+	IGamePlayer *player{playerhelpers->GetGamePlayer(client)};
+	if(player->IsFakeClient() ||
+		player->IsReplay() ||
+		player->IsSourceTV()) {
+		return;
+	}
+
+	human_clients.emplace_back(client-1);
+}
+
+void SendProxyManager::OnClientDisconnecting(int client)
+{
+	IGamePlayer *player{playerhelpers->GetGamePlayer(client)};
+	if(player->IsFakeClient() ||
+		player->IsReplay() ||
+		player->IsSourceTV()) {
+		return;
+	}
+
+	human_clients.erase(std::find(human_clients.begin(), human_clients.end(), client-1));
+}
+#endif
 
 void SendProxyManager::OnEntityDestroyed(CBaseEntity* pEnt)
 {
@@ -564,12 +881,14 @@ void Hook_GameFrame(bool simulating)
 	RETURN_META(MRES_IGNORED);
 }
 
+#ifndef SENDPROXY_PERCLIENT_METHOD_V2
 int SendProxyManager::GetClientCount() const
 {
 	if (g_iCurrentClientIndexInLoop != -1)
 		RETURN_META_VALUE(MRES_SUPERCEDE, g_iCurrentClientIndexInLoop + 1);
 	RETURN_META_VALUE(MRES_IGNORED, 0/*META_RESULT_ORIG_RET(int)*/);
 }
+#endif
 
 //main sm class implementation
 
@@ -606,6 +925,10 @@ bool SendProxyManager::SDK_OnLoad(char *error, size_t maxlength, bool late)
 	sharesys->RegisterLibrary(myself, "sendproxy14");
 	plsys->AddPluginsListener(this);
 
+#ifdef SENDPROXY_PERCLIENT_METHOD_V2
+	playerhelpers->AddClientListener(this);
+#endif
+
 	return true;
 }
 
@@ -630,22 +953,91 @@ void SendProxyManager::SDK_OnUnload()
 	
 	SH_REMOVE_HOOK(IServerGameClients, ClientDisconnect, gameclients, SH_STATIC(Hook_ClientDisconnect), false);
 	SH_REMOVE_HOOK(IServerGameDLL, GameFrame, gamedll, SH_STATIC(Hook_GameFrame), false);
+#ifndef SENDPROXY_PERCLIENT_METHOD_V2
 	if (!g_bFirstTimeCalled)
 		SH_REMOVE_HOOK(IServer, GetClientCount, g_pIServer, SH_MEMBER(this, &SendProxyManager::GetClientCount), false);
 
 	DESTROY_DETOUR(CGameServer_SendClientMessages);
 	DESTROY_DETOUR(CGameClient_ShouldSendMessages);
+#else
+	DESTROY_DETOUR(SendTable_Encode);
+	DESTROY_DETOUR(SV_EnsureInstanceBaseline);
+	DESTROY_DETOUR(SendTable_CalcDelta);
+	DESTROY_DETOUR(CFrameSnapshotManager_CreatePackedEntity);
+	DESTROY_DETOUR(SV_CreateBaseline);
+	SH_REMOVE_HOOK(IVEngineServer, PlaybackTempEntity, engine, SH_STATIC(PlaybackTempEntity), false);
+	if(current_packentity_params != nullptr) {
+		delete current_packentity_params;
+	}
+#endif
 	DESTROY_DETOUR(SV_ComputeClientPacks);
-	
+
 	gameconfs->CloseGameConfigFile(g_pGameConf);
 	gameconfs->CloseGameConfigFile(g_pGameConfSDKTools);
 	
+#ifdef SENDPROXY_PERCLIENT_METHOD_V2
+	playerhelpers->RemoveClientListener(this);
+#endif
+
 	plsys->RemovePluginsListener(this);
 	if( g_pSDKHooks )
 	{
 		g_pSDKHooks->RemoveEntityListener(this);
 	}
 	delete g_pMyInterface;
+}
+
+static void disable_perclient_detours()
+{
+	g_iCurrentClientIndexInLoop = -1;
+#ifndef SENDPROXY_PERCLIENT_METHOD_V2
+	DISABLE_DETOUR(CGameServer_SendClientMessages);
+	DISABLE_DETOUR(CGameClient_ShouldSendMessages);
+	SH_REMOVE_HOOK(IServer, GetClientCount, g_pIServer, SH_MEMBER(&g_SendProxyManager, &SendProxyManager::GetClientCount), false);
+	g_bSVComputePacksDone = true;
+	g_bFirstTimeCalled = true;
+#else
+	disable_callbacks = false;
+	should_disable_callbacks = false;
+	DISABLE_DETOUR(SendTable_Encode);
+	DISABLE_DETOUR(SV_EnsureInstanceBaseline);
+	DISABLE_DETOUR(SendTable_CalcDelta);
+	DISABLE_DETOUR(CFrameSnapshotManager_CreatePackedEntity);
+	DISABLE_DETOUR(SV_CreateBaseline);
+	SH_REMOVE_HOOK(IVEngineServer, PlaybackTempEntity, engine, SH_STATIC(PlaybackTempEntity), false);
+	perclient_sendtables.clear();
+	if(current_packentity_params != nullptr) {
+		delete current_packentity_params;
+		current_packentity_params = nullptr;
+	}
+#endif
+	DISABLE_DETOUR(SV_ComputeClientPacks);
+}
+
+static void enable_perclient_detours()
+{
+	g_iCurrentClientIndexInLoop = -1;
+#ifndef SENDPROXY_PERCLIENT_METHOD_V2
+	bool bDetoursInited = false;
+	g_bSVComputePacksDone = false;
+	CREATE_DETOUR(CGameServer_SendClientMessages, "CGameServer::SendClientMessages", bDetoursInited);
+	CREATE_DETOUR(CGameClient_ShouldSendMessages, "CGameClient::ShouldSendMessages", bDetoursInited);
+#else
+	disable_callbacks = false;
+	should_disable_callbacks = false;
+	if(current_packentity_params != nullptr) {
+		delete current_packentity_params;
+		current_packentity_params = nullptr;
+	}
+	bool bDetoursInited = false;
+	CREATE_DETOUR_STATIC(SendTable_Encode, "SendTable_Encode", bDetoursInited);
+	CREATE_DETOUR_STATIC(SV_EnsureInstanceBaseline, "SV_EnsureInstanceBaseline", bDetoursInited);
+	CREATE_DETOUR_STATIC(SendTable_CalcDelta, "SendTable_CalcDelta", bDetoursInited);
+	CREATE_DETOUR(CFrameSnapshotManager_CreatePackedEntity, "CFrameSnapshotManager::CreatePackedEntity", bDetoursInited);
+	CREATE_DETOUR_STATIC(SV_CreateBaseline, "SV_CreateBaseline", bDetoursInited);
+	SH_ADD_HOOK(IVEngineServer, PlaybackTempEntity, engine, SH_STATIC(PlaybackTempEntity), false);
+#endif
+	CREATE_DETOUR_STATIC(SV_ComputeClientPacks, "SV_ComputeClientPacks", bDetoursInited);
 }
 
 void SendProxyManager::OnCoreMapEnd()
@@ -659,11 +1051,7 @@ void SendProxyManager::OnCoreMapEnd()
 	g_pGameRulesProxyEdict = nullptr;
 	
 	if(g_numPerClientHooks > 0) {
-		DISABLE_DETOUR(CGameServer_SendClientMessages);
-		DISABLE_DETOUR(CGameClient_ShouldSendMessages);
-		DISABLE_DETOUR(SV_ComputeClientPacks);
-		g_iCurrentClientIndexInLoop = -1;
-		g_bSVComputePacksDone = true;
+		disable_perclient_detours();
 	}
 }
 
@@ -680,12 +1068,7 @@ void SendProxyManager::OnCoreMapStart(edict_t * pEdictList, int edictCount, int 
 		smutils->LogError(myself, "Unable to get gamerules proxy ent (2)!");
 	
 	if(g_numPerClientHooks > 0) {
-		bool bDetoursInited = false;
-		g_bSVComputePacksDone = false;
-		g_iCurrentClientIndexInLoop = -1;
-		CREATE_DETOUR(CGameServer_SendClientMessages, "CGameServer::SendClientMessages", bDetoursInited);
-		CREATE_DETOUR(CGameClient_ShouldSendMessages, "CGameClient::ShouldSendMessages", bDetoursInited);
-		CREATE_DETOUR_STATIC(SV_ComputeClientPacks, "SV_ComputeClientPacks", bDetoursInited);
+		enable_perclient_detours();
 	}
 }
 
@@ -703,8 +1086,10 @@ bool SendProxyManager::SDK_OnMetamodLoad(ISmmAPI *ismm, char *error, size_t maxl
 	GET_CONVAR(sv_parallel_packentities);
 	sv_parallel_packentities->SetValue(0); //If we don't do that the sendproxy extension will crash the server (Post ref: https://forums.alliedmods.net/showpost.php?p=2540106&postcount=324 )
 	GET_CONVAR(sv_parallel_sendsnapshot);
-	sv_parallel_sendsnapshot->SetValue(0); //If we don't do that, sendproxy will not work correctly and may crash server. This affects all versions of sendproxy manager!
-	
+#ifndef SENDPROXY_PERCLIENT_METHOD_V2
+	sv_parallel_sendsnapshot->SetValue(0); //If we don't do that, sendproxy will not work correctly and may crash server.
+#endif
+
 	return true;
 }
 
@@ -798,6 +1183,22 @@ void SendProxyManager::OnPluginUnloaded(IPlugin * plugin)
 
 bool SendProxyManager::AddHookToList(SendPropHook &&hook)
 {
+	if(hook.per_client) {
+#ifdef SENDPROXY_PERCLIENT_METHOD_V2
+		const SendTable *pTable{hook.pVar->GetDataTable()};
+
+		auto it{perclient_sendtables.find(pTable)};
+		if(it == perclient_sendtables.cend()) {
+			it = perclient_sendtables.emplace(std::pair<const SendTable *, std::size_t>{pTable, 0}).first;
+		}
+
+		++it->second;
+#endif
+		if(++g_numPerClientHooks == 1) {
+			enable_perclient_detours();
+		}
+	}
+
 	//Need to make sure this prop isn't already hooked for this entity - we don't care anymore
 	bool bEdictHooked = false;
 	for (auto &it : g_Hooks)
@@ -812,17 +1213,6 @@ bool SendProxyManager::AddHookToList(SendPropHook &&hook)
 		}
 	}
 	
-	if(hook.per_client) {
-		if(++g_numPerClientHooks == 1) {
-			bool bDetoursInited = false;
-			g_bSVComputePacksDone = false;
-			g_iCurrentClientIndexInLoop = -1;
-			CREATE_DETOUR(CGameServer_SendClientMessages, "CGameServer::SendClientMessages", bDetoursInited);
-			CREATE_DETOUR(CGameClient_ShouldSendMessages, "CGameClient::ShouldSendMessages", bDetoursInited);
-			CREATE_DETOUR_STATIC(SV_ComputeClientPacks, "SV_ComputeClientPacks", bDetoursInited);
-		}
-	}
-	
 	g_Hooks.emplace_back(std::move(hook));
 	if (!bEdictHooked) {
 		g_vHookedEdicts.emplace_back(hook.pEnt);
@@ -832,26 +1222,120 @@ bool SendProxyManager::AddHookToList(SendPropHook &&hook)
 
 bool SendProxyManager::AddHookToListGamerules(SendPropHookGamerules &&hook)
 {
+	if(hook.per_client) {
+#ifdef SENDPROXY_PERCLIENT_METHOD_V2
+		const SendTable *pTable{hook.pVar->GetDataTable()};
+
+		auto it{perclient_sendtables.find(pTable)};
+		if(it == perclient_sendtables.cend()) {
+			it = perclient_sendtables.emplace(std::pair<const SendTable *, std::size_t>{pTable, 0}).first;
+		}
+
+		++it->second;
+#endif
+		if(++g_numPerClientHooks == 1) {
+			enable_perclient_detours();
+		}
+	}
+
 	//Need to make sure this prop isn't already hooked for this entity - we don't care anymore
-	/*for (int i = 0; i < g_HooksGamerules.size(); i++)
+	/*for (int i = 0; i < g_HooksGamerules.Count(); i++)
 	{
 		if (g_HooksGamerules[i].pVar == hook.pVar)
 			return false;
 	}*/
-	
-	if(hook.per_client) {
-		if(++g_numPerClientHooks == 1) {
-			bool bDetoursInited = false;
-			g_bSVComputePacksDone = false;
-			g_iCurrentClientIndexInLoop = -1;
-			CREATE_DETOUR(CGameServer_SendClientMessages, "CGameServer::SendClientMessages", bDetoursInited);
-			CREATE_DETOUR(CGameClient_ShouldSendMessages, "CGameClient::ShouldSendMessages", bDetoursInited);
-			CREATE_DETOUR_STATIC(SV_ComputeClientPacks, "SV_ComputeClientPacks", bDetoursInited);
-		}
-	}
-	
 	g_HooksGamerules.emplace_back(std::move(hook));
 	return true;
+}
+
+bool SendProxyManager::UnhookProxy(const SendPropHook &hook)
+{
+	if(hook.per_client) {
+		if(--g_numPerClientHooks == 0) {
+			disable_perclient_detours();
+		}
+#ifdef SENDPROXY_PERCLIENT_METHOD_V2
+		const SendTable *pTable{hook.pVar->GetDataTable()};
+
+		auto it{perclient_sendtables.find(pTable)};
+		if(it != perclient_sendtables.cend()) {
+			if(--it->second == 0) {
+				perclient_sendtables.erase(it);
+			}
+		}
+#endif
+	}
+
+	bool should_return = false;
+	//if there are other hooks for this prop, don't change the proxy, just remove it from our list
+	auto it2 = g_Hooks.begin();
+	while(it2 != g_Hooks.end()) {
+		if (it2->pVar == hook.pVar &&
+			&*it2 != &hook)
+		{
+			CallListenersForHook(hook);
+			should_return = true;
+			break;
+		}
+
+		++it2;
+	}
+	if(should_return) {
+		return true;
+	}
+	auto it = g_vHookedEdicts.begin();
+	while(it != g_vHookedEdicts.end()) {
+		if(*it == hook.pEnt) {
+			g_vHookedEdicts.erase(it);
+			break;
+		}
+
+		++it;
+	}
+	CallListenersForHook(hook);
+	hook.pVar->SetProxyFn(hook.pRealProxy);
+	return false;
+}
+
+bool SendProxyManager::UnhookProxyGamerules(const SendPropHookGamerules &hook)
+{
+	if(hook.per_client) {
+		if(--g_numPerClientHooks == 0) {
+			disable_perclient_detours();
+		}
+#ifdef SENDPROXY_PERCLIENT_METHOD_V2
+		const SendTable *pTable{hook.pVar->GetDataTable()};
+
+		auto it{perclient_sendtables.find(pTable)};
+		if(it != perclient_sendtables.cend()) {
+			if(--it->second == 0) {
+				perclient_sendtables.erase(it);
+			}
+		}
+#endif
+	}
+
+	bool should_return = false;
+	//if there are other hooks for this prop, don't change the proxy, just remove it from our list
+	auto it = g_HooksGamerules.begin();
+	while(it != g_HooksGamerules.end())
+	{
+		if (it->pVar == hook.pVar &&
+			&*it != &hook)
+		{
+			CallListenersForHookGamerules(hook);
+			should_return = true;
+			break;
+		}
+
+		++it;
+	}
+	if(should_return) {
+		return true;
+	}
+	CallListenersForHookGamerules(hook);
+	hook.pVar->SetProxyFn(hook.pRealProxy);
+	return false;
 }
 
 bool SendProxyManager::AddChangeHookToList(PropChangeHook &&sHook, CallBackInfo &&pInfo)
@@ -940,74 +1424,6 @@ bool SendProxyManager::AddChangeHookToListGamerules(PropChangeHookGamerules &&sH
 		g_ChangeHooksGamerules.emplace_back(std::move(sHook));
 	}
 	return true;
-}
-
-bool SendProxyManager::UnhookProxy(const SendPropHook &hook)
-{
-	if(hook.per_client) {
-		if(--g_numPerClientHooks == 0) {
-			DISABLE_DETOUR(CGameServer_SendClientMessages);
-			DISABLE_DETOUR(CGameClient_ShouldSendMessages);
-			DISABLE_DETOUR(SV_ComputeClientPacks);
-			g_iCurrentClientIndexInLoop = -1;
-			g_bSVComputePacksDone = true;
-		}
-	}
-	
-	//if there are other hooks for this prop, don't change the proxy, just remove it from our list
-	auto it2 = g_Hooks.begin();
-	while(it2 != g_Hooks.end()) {
-		if (it2->pVar == hook.pVar &&
-			&*it2 != &hook)
-		{
-			CallListenersForHook(hook);
-			return true;
-		}
-		
-		++it2;
-	}
-	auto it = g_vHookedEdicts.begin();
-	while(it != g_vHookedEdicts.end()) {
-		if(*it == hook.pEnt) {
-			g_vHookedEdicts.erase(it);
-			break;
-		}
-		
-		++it;
-	}
-	CallListenersForHook(hook);
-	hook.pVar->SetProxyFn(hook.pRealProxy);
-	return false;
-}
-
-bool SendProxyManager::UnhookProxyGamerules(const SendPropHookGamerules &hook)
-{
-	if(hook.per_client) {
-		if(--g_numPerClientHooks == 0) {
-			DISABLE_DETOUR(CGameServer_SendClientMessages);
-			DISABLE_DETOUR(CGameClient_ShouldSendMessages);
-			DISABLE_DETOUR(SV_ComputeClientPacks);
-			g_iCurrentClientIndexInLoop = -1;
-			g_bSVComputePacksDone = true;
-		}
-	}
-	
-	//if there are other hooks for this prop, don't change the proxy, just remove it from our list
-	auto it = g_HooksGamerules.begin();
-	while(it != g_HooksGamerules.end())
-	{
-		if (it->pVar == hook.pVar &&
-			&*it != &hook)
-		{
-			CallListenersForHookGamerules(hook);
-			return true;
-		}
-		
-		++it;
-	}
-	CallListenersForHookGamerules(hook);
-	hook.pVar->SetProxyFn(hook.pRealProxy);
-	return false;
 }
 
 bool SendProxyManager::UnhookChange(PropChangeHook &hook, const CallBackInfo &pInfo)
@@ -1209,8 +1625,10 @@ void CallChangeGamerulesCallbacks(const PropChangeHookGamerules &pInfo, void * p
 
 bool CallInt(const SendPropHook &hook, int &ret)
 {
+#ifndef SENDPROXY_PERCLIENT_METHOD_V2
 	if (!g_bSVComputePacksDone)
 		return false;
+#endif
 	
 	AUTO_LOCK_FM(g_WorkMutex);
 	
@@ -1263,9 +1681,11 @@ bool CallInt(const SendPropHook &hook, int &ret)
 
 bool CallIntGamerules(const SendPropHookGamerules &hook, int &ret)
 {
+#ifndef SENDPROXY_PERCLIENT_METHOD_V2
 	if (!g_bSVComputePacksDone)
 		return false;
-	
+#endif
+
 	AUTO_LOCK_FM(g_WorkMutex);
 	
 	if(hook.per_client && g_iCurrentClientIndexInLoop == -1) {
@@ -1316,8 +1736,10 @@ bool CallIntGamerules(const SendPropHookGamerules &hook, int &ret)
 
 bool CallFloat(const SendPropHook &hook, float &ret)
 {
+#ifndef SENDPROXY_PERCLIENT_METHOD_V2
 	if (!g_bSVComputePacksDone)
 		return false;
+#endif
 	
 	AUTO_LOCK_FM(g_WorkMutex);
 	
@@ -1370,8 +1792,10 @@ bool CallFloat(const SendPropHook &hook, float &ret)
 
 bool CallFloatGamerules(const SendPropHookGamerules &hook, float &ret)
 {
+#ifndef SENDPROXY_PERCLIENT_METHOD_V2
 	if (!g_bSVComputePacksDone)
 		return false;
+#endif
 	
 	AUTO_LOCK_FM(g_WorkMutex);
 	
@@ -1423,8 +1847,10 @@ bool CallFloatGamerules(const SendPropHookGamerules &hook, float &ret)
 
 bool CallString(const SendPropHook &hook, char *&ret)
 {
+#ifndef SENDPROXY_PERCLIENT_METHOD_V2
 	if (!g_bSVComputePacksDone)
 		return false;
+#endif
 	
 	AUTO_LOCK_FM(g_WorkMutex);
 	
@@ -1478,8 +1904,10 @@ bool CallString(const SendPropHook &hook, char *&ret)
 
 bool CallStringGamerules(const SendPropHookGamerules &hook, char *&ret)
 {
+#ifndef SENDPROXY_PERCLIENT_METHOD_V2
 	if (!g_bSVComputePacksDone)
 		return false;
+#endif
 	
 	AUTO_LOCK_FM(g_WorkMutex);
 	
@@ -1541,8 +1969,10 @@ bool CallStringGamerules(const SendPropHookGamerules &hook, char *&ret)
 
 bool CallVector(const SendPropHook &hook, Vector &vec)
 {
+#ifndef SENDPROXY_PERCLIENT_METHOD_V2
 	if (!g_bSVComputePacksDone)
 		return false;
+#endif
 	
 	AUTO_LOCK_FM(g_WorkMutex);
 	
@@ -1604,8 +2034,10 @@ bool CallVector(const SendPropHook &hook, Vector &vec)
 
 bool CallVectorGamerules(const SendPropHookGamerules &hook, Vector &vec)
 {
+#ifndef SENDPROXY_PERCLIENT_METHOD_V2
 	if (!g_bSVComputePacksDone)
 		return false;
+#endif
 	
 	AUTO_LOCK_FM(g_WorkMutex);
 	
@@ -1762,82 +2194,94 @@ void GlobalProxy(const SendProp *pProp, const void *pStructBase, const void * pD
 
 void GlobalProxyGamerules(const SendProp *pProp, const void *pStructBase, const void * pData, DVariant *pOut, int iElement, int objectID)
 {
+#ifndef SENDPROXY_PERCLIENT_METHOD_V2
 	if (!g_bShouldChangeGameRulesState)
 		g_bShouldChangeGameRulesState = true; //If this called once, so, the props wants to be sent at this time, and we should do this for all clients!
+#endif
 	bool bHandled = false;
 	for (auto &it : g_HooksGamerules)
 	{
 		if (it.pVar == pProp)
 		{
-			switch (it.propType)
-			{
-				case PropType::Prop_Int:
+		#ifdef SENDPROXY_PERCLIENT_METHOD_V2
+			if(disable_callbacks) {
+				it.pRealProxy(pProp, pStructBase, pData, pOut, iElement, objectID);
+				bHandled = true;
+				return;
+			} else {
+		#endif
+				switch (it.propType)
 				{
-					int result = *(int *)pData;
+					case PropType::Prop_Int:
+					{
+						int result = *(int *)pData;
 
-					if (CallIntGamerules(it, result))
-					{
-						long data = result;
-						it.pRealProxy(pProp, pStructBase, &data, pOut, iElement, objectID);
-						return; // If somebody already handled this call, do not call other hooks for this entity & prop
+						if (CallIntGamerules(it, result))
+						{
+							long data = result;
+							it.pRealProxy(pProp, pStructBase, &data, pOut, iElement, objectID);
+							return; // If somebody already handled this call, do not call other hooks for this entity & prop
+						}
+						else
+						{
+							it.pRealProxy(pProp, pStructBase, pData, pOut, iElement, objectID);
+						}
+						bHandled = true;
+						continue;
 					}
-					else
+					case PropType::Prop_Float:
 					{
-						it.pRealProxy(pProp, pStructBase, pData, pOut, iElement, objectID);
-					}
-					bHandled = true;
-					continue;
-				}
-				case PropType::Prop_Float:
-				{
-					float result = *(float *)pData;
+						float result = *(float *)pData;
 
-					if (CallFloatGamerules(it, result))
-					{
-						it.pRealProxy(pProp, pStructBase, &result, pOut, iElement, objectID);
-						return; // If somebody already handled this call, do not call other hooks for this entity & prop
-					} 
-					else
-					{
-						it.pRealProxy(pProp, pStructBase, pData, pOut, iElement, objectID);
+						if (CallFloatGamerules(it, result))
+						{
+							it.pRealProxy(pProp, pStructBase, &result, pOut, iElement, objectID);
+							return; // If somebody already handled this call, do not call other hooks for this entity & prop
+						} 
+						else
+						{
+							it.pRealProxy(pProp, pStructBase, pData, pOut, iElement, objectID);
+						}
+						bHandled = true;
+						continue;
 					}
-					bHandled = true;
-					continue;
-				}
-				case PropType::Prop_String:
-				{
-					char * result = *(char **)pData; //We need to use const because of C++11 restriction
+					case PropType::Prop_String:
+					{
+						char * result = *(char **)pData; //We need to use const because of C++11 restriction
 
-					if (CallStringGamerules(it, result))
-					{
-						it.pRealProxy(pProp, pStructBase, &result, pOut, iElement, objectID);
-						return; // If somebody already handled this call, do not call other hooks for this entity & prop
+						if (CallStringGamerules(it, result))
+						{
+							it.pRealProxy(pProp, pStructBase, &result, pOut, iElement, objectID);
+							return; // If somebody already handled this call, do not call other hooks for this entity & prop
+						}
+						else
+						{
+							it.pRealProxy(pProp, pStructBase, pData, pOut, iElement, objectID);
+						}
+						bHandled = true;
+						continue;
 					}
-					else
+					case PropType::Prop_Vector:
 					{
-						it.pRealProxy(pProp, pStructBase, pData, pOut, iElement, objectID);
-					}
-					bHandled = true;
-					continue;
-				}
-				case PropType::Prop_Vector:
-				{
-					Vector result = *(Vector *)pData;
+						Vector result = *(Vector *)pData;
 
-					if (CallVectorGamerules(it, result))
-					{
-						it.pRealProxy(pProp, pStructBase, &result, pOut, iElement, objectID);
-						return; // If somebody already handled this call, do not call other hooks for this entity & prop
+						if (CallVectorGamerules(it, result))
+						{
+							it.pRealProxy(pProp, pStructBase, &result, pOut, iElement, objectID);
+							return; // If somebody already handled this call, do not call other hooks for this entity & prop
+						}
+						else
+						{
+							it.pRealProxy(pProp, pStructBase, pData, pOut, iElement, objectID);
+						}
+						bHandled = true;
+						continue;
 					}
-					else
-					{
-						it.pRealProxy(pProp, pStructBase, pData, pOut, iElement, objectID);
-					}
-					bHandled = true;
-					continue;
+					default: rootconsole->ConsolePrint("%s: SendProxy report: Unknown prop type (%s).", __func__, it.pVar->GetName());
 				}
-				default: rootconsole->ConsolePrint("%s: SendProxy report: Unknown prop type (%s).", __func__, it.pVar->GetName());
+		#ifdef SENDPROXY_PERCLIENT_METHOD_V2
 			}
+		#endif
 		}
 	}
 	if (!bHandled)
